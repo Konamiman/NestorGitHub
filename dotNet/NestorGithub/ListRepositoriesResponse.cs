@@ -4,12 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace NestorGithub
+namespace Konamiman.NestorGithub
 {
-    class Program
+    class ListRepositoriesResponse
     {
-        static void Main(string[] args)
-        {
-        }
+        public string[] RespositoryNames { get; set; }
     }
 }
