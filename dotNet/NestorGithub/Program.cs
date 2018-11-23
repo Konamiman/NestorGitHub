@@ -10,6 +10,7 @@ namespace Konamiman.NestorGithub
     {
         static int Main(string[] args)
         {
+            args = new[] { "link", "Testing", @"c:\tmp\nex"};
             var result = new Program().Run(args);
             if (Debugger.IsAttached) Console.ReadKey();
             return result;
@@ -26,11 +27,25 @@ namespace Konamiman.NestorGithub
 Creates a new repository in your GitHub account.
 -p creates a private repository, you need a paid GitHub acount for that.
 
+
   ngh destroy <repository name>
 
 Destroys a repository in your GitHub account.
 Be careful, this can't be undone!
 
+
+  ngh clone [<owner>/]<repository name> [<local directory>]
+
+Creates and links a local repository from the contents of a remote repository.
+Default owner is the configured GitHub user name.
+Default local directory is the current directory. If it exists it must be empty,
+if not it will be created.
+
+
+  ngh link [<owner>/]<repository name> [<local directory>]
+
+Same as clone, but the local directory doesn't need to be empty
+and no files are downloaded.
 ";
 
         public Program()
@@ -38,7 +53,9 @@ Be careful, this can't be undone!
             actions = new Dictionary<string, Func<string[], int>>
             {
                 { "new", CreateRepository },
-                { "destroy", DestroyRepository }
+                { "destroy", DestroyRepository },
+                { "clone", args => CloneRepository(args, false) },
+                { "link", args => CloneRepository(args, true) }
             };
         }
 
@@ -136,16 +153,34 @@ Please type in the name of the repository to confirm (or press Enter to cancel):
             return 0;
         }
 
+        int CloneRepository(string[] args, bool linkOnly)
+        {
+            if (args.Length == 0)
+            {
+                Print("*** Repository name is required");
+                return 1;
+            }
+
+            var repositoryName = FullRepositoryName(args[0]);
+            var directory = new FilesystemDirectory(args.Length > 1 ? args[1] : null);
+            var localRepository = new LocalRepository(directory, api, repositoryName);
+
+            localRepository.Clone(linkOnly);
+
+            return 0;
+        }
+
         void Print(string text)
         {
             Console.Write(text);
         }
+
+        string FullRepositoryName(string repositoryName)
+        {
+            if (repositoryName.Contains("/"))
+                return repositoryName;
+            else
+                return $"{Configuration.GithubUser}/{repositoryName}";
+        }
     }
 }
-
-/*
- * This action cannot be undone. This will permanently delete the Konamiman/Test repository, wiki, issues, and comments, and remove all collaborator associations.
-
-Please type in the name of the repository to confirm.
-
-    */

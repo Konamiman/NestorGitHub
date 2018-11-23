@@ -1,4 +1,5 @@
 ﻿using System.Configuration;
+using System.Diagnostics;
 
 namespace Konamiman.NestorGithub
 {

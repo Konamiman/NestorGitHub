@@ -15,7 +15,10 @@ namespace Konamiman.NestorGithub
 
         public T Value<T>(string key) where T:class
         {
-            if(typeof(T) == typeof(JsonObject[]))
+            if (typeof(T) == typeof(JsonObject))
+                return new JsonObject(jObject[key] as JObject) as T;
+
+            if (typeof(T) == typeof(JsonObject[]))
                 return jObject[key].Values<JObject>().Select(o => new JsonObject(o)).ToArray() as T;
 
             return jObject[key].Value<T>();

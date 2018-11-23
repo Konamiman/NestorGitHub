@@ -46,29 +46,34 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CommitData.cs" />
     <Compile Include="Configuration.cs" />
     <Compile Include="CreateRepositoryResponse.cs" />
     <Compile Include="ApiClient.cs" />
     <Compile Include="ApiException.cs" />
+    <Compile Include="FilesystemDirectory.cs" />
     <Compile Include="GeneralExtensions.cs" />
     <Compile Include="HttpClient.cs" />
     <Compile Include="HttpResponse.cs" />
     <Compile Include="IHttpClient.cs" />
     <Compile Include="JsonObject.cs" />
     <Compile Include="ListRepositoriesResponse.cs" />
+    <Compile Include="LocalRepository.cs" />
+    <Compile Include="Printer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="JsonExtensions.cs" />
+    <Compile Include="RepositoryFileReference.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
-    <None Include="secrets.config">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="secrets.config.example">
       <Generator>SettingsSingleFileGenerator</Generator>
     </None>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>if exist $(ProjectDir)secrets.config copy $(ProjectDir)secrets.config $(TargetDir)</PostBuildEvent>
+  </PropertyGroup>
 </Project>

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
+using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
@@ -42,9 +43,57 @@ namespace Konamiman.NestorGithub
             Delete($"/repos/{user}/{name}");
         }
 
-        private string Get(string path)
+        public string GetBranchCommitSha(string fullRepositoryName, string branchName)
         {
-            return DoApi(() => httpClient.ExecuteRequest(HttpMethod.Get, path));
+            var response = Get($"/repos/{fullRepositoryName}/git/refs/heads/{branchName}", returnNullWhenNotFound: true);
+            if (response == null)
+                return null;
+
+            return response.AsJsonObject().Value<JsonObject>("object").Value<string>("sha");
+        }
+
+        public string[] GetBranchNames(string fullRepositoryName)
+        {
+            var response = Get($"/repos/{fullRepositoryName}/git/refs/heads");
+
+            return response.AsArrayOfJsonObjects().Select(o => o.Value<string>("ref").Substring("refs/heads/".Length)).ToArray();
+        }
+
+        public CommitData GetCommitData(string fullRepositoryName, string commitSha)
+        {
+            var response = Get($"/repos/{fullRepositoryName}/git/commits/{commitSha}").AsJsonObject();
+            var authorData = response.Value<JsonObject>("author");
+            var treeData = response.Value<JsonObject>("tree");
+            return new CommitData
+            {
+                Sha = commitSha,
+                TreeSha = treeData.Value<string>("sha"),
+                AuthorName = authorData.Value<string>("name"),
+                AuthorEmail = authorData.Value<string>("email"),
+                Date = DateTime.Parse(authorData.Value<string>("date"))
+            };
+        }
+
+        public RepositoryFileReference[] GetTreeFiles(string fullRepositoryName, string commitSha)
+        {
+            var treeSha = GetCommitData(fullRepositoryName, commitSha).TreeSha;
+            var response = Get($"/repos/{fullRepositoryName}/git/trees/{treeSha}?recursive=1").AsJsonObject();
+            var treeData = response.Value<JsonObject[]>("tree");
+            return treeData
+                .Where(item => item.Value<string>("type") == "blob")
+                .Select(item => new RepositoryFileReference { Path = item.Value<string>("path"), BlobSha = item.Value<string>("sha") })
+                .ToArray();
+        }
+
+        public byte[] GetBlob(string fullRepositoryName, string blobSha)
+        {
+            var result = Get($"/repos/{fullRepositoryName}/git/blobs/{blobSha}").AsJsonObject();
+            return Convert.FromBase64String(result.Value<string>("content"));
+        }
+
+        private string Get(string path, bool returnNullWhenNotFound = false)
+        {
+            return DoApi(() => httpClient.ExecuteRequest(HttpMethod.Get, path), returnNullWhenNotFound);
         }
 
         private string Post(string path, string content = null)
@@ -57,11 +106,13 @@ namespace Konamiman.NestorGithub
             return DoApi(() => httpClient.ExecuteRequest(HttpMethod.Delete, path));
         }
 
-        private string DoApi(Func<HttpResponse> apiAction)
+        private string DoApi(Func<HttpResponse> apiAction, bool returnNullWhenNotFound = false)
         {
             var response = apiAction();
             if (response.IsSuccess)
                 return response.Content;
+            else if (response.StatusCode == 404 && returnNullWhenNotFound)
+                return null;
             else
                 throw ApiException.FromResponse(response);
         }
