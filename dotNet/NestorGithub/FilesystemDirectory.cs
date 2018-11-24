@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Text;
 
 namespace Konamiman.NestorGithub
@@ -40,9 +41,27 @@ namespace Konamiman.NestorGithub
             File.WriteAllBytes(fileInfo.FullName, contents);
         }
 
+        public string ReadTextFile(string path)
+        {
+            return File.ReadAllText(Combine(rootPath, path), Encoding.UTF8);
+        }
+
+        public void DeleteDirectory(string path)
+        {
+            if(DirectoryExists(path))
+            {
+                Directory.Delete(Combine(path), recursive: true);
+            }
+        }
+
         private string Combine(params string[] pathSegments)
         {
-            return Path.Combine(rootPath, Path.Combine(pathSegments));
+            return CombinePath(rootPath, CombinePath(pathSegments));
+        }
+
+        public static string CombinePath(params string[] pathSegments)
+        {
+            return Path.Combine(pathSegments).Replace(Path.DirectorySeparatorChar, '/');
         }
     }
 }

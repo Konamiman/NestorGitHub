@@ -10,7 +10,6 @@ namespace Konamiman.NestorGithub
     {
         static int Main(string[] args)
         {
-            args = new[] { "link", "Testing", @"c:\tmp\nex"};
             var result = new Program().Run(args);
             if (Debugger.IsAttached) Console.ReadKey();
             return result;
@@ -46,6 +45,12 @@ if not it will be created.
 
 Same as clone, but the local directory doesn't need to be empty
 and no files are downloaded.
+
+
+  ngh unlink [<local directory>]
+
+Unlinks the local directory from the remote repository.
+The directory contents are kept untouched.
 ";
 
         public Program()
@@ -55,7 +60,8 @@ and no files are downloaded.
                 { "new", CreateRepository },
                 { "destroy", DestroyRepository },
                 { "clone", args => CloneRepository(args, false) },
-                { "link", args => CloneRepository(args, true) }
+                { "link", args => CloneRepository(args, true) },
+                { "unlink", UnlinkRepository }
             };
         }
 
@@ -84,6 +90,11 @@ and no files are downloaded.
             {
                 Print($"*** {ex.Message}\r\n");
                 Print(ex.Errors.Select(e => e.Select(kvp => $"{kvp.Key} = {kvp.Value}").JoinInLines()).JoinInLines());
+                return 1;
+            }
+            catch (InvalidOperationException ex)
+            {
+                Print($"*** {ex.Message}\r\n");
                 return 1;
             }
             catch (Exception ex)
@@ -162,10 +173,26 @@ Please type in the name of the repository to confirm (or press Enter to cancel):
             }
 
             var repositoryName = FullRepositoryName(args[0]);
-            var directory = new FilesystemDirectory(args.Length > 1 ? args[1] : null);
-            var localRepository = new LocalRepository(directory, api, repositoryName);
+            if(repositoryName.StartsWith("/"))
+            {
+                Print("*** Username is not configured, please specify a full repository name (user/repository)");
+                return 1;
+            }
 
-            localRepository.Clone(linkOnly);
+            var directory = new FilesystemDirectory(args.Length > 1 ? args[1] : null);
+            var localRepository = new LocalRepository(directory, api);
+
+            localRepository.Clone(repositoryName, linkOnly);
+
+            return 0;
+        }
+
+        int UnlinkRepository(string[] args)
+        {
+            var directory = new FilesystemDirectory(args.Length > 0 ? args[0] : null);
+            var localRepository = new LocalRepository(directory, null);
+
+            localRepository.Unlink();
 
             return 0;
         }
