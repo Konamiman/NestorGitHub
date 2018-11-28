@@ -6,7 +6,7 @@ using System.Net;
 
 namespace Konamiman.NestorGithub
 {
-    class Program
+    partial class Program
     {
         static int Main(string[] args)
         {
@@ -15,47 +15,11 @@ namespace Konamiman.NestorGithub
             return result;
         }
 
-        readonly Dictionary<string, Func<string[], int>> actions;
-        ApiClient api;
-        
-        const string explanation =
-@"Usage:
-
-  ngh new [-p] <repository name> [<repository description>]
-
-Creates a new repository in your GitHub account.
--p creates a private repository, you need a paid GitHub acount for that.
-
-
-  ngh destroy <repository name>
-
-Destroys a repository in your GitHub account.
-Be careful, this can't be undone!
-
-
-  ngh clone [<owner>/]<repository name> [<local directory>]
-
-Creates and links a local repository from the contents of a remote repository.
-Default owner is the configured GitHub user name.
-Default local directory is the current directory. If it exists it must be empty,
-if not it will be created.
-
-
-  ngh link [<owner>/]<repository name> [<local directory>]
-
-Same as clone, but the local directory doesn't need to be empty
-and no files are downloaded.
-
-
-  ngh unlink [<local directory>]
-
-Unlinks the local directory from the remote repository.
-The directory contents are kept untouched.
-";
-
+        readonly Dictionary<string, Action<string[]>> actions;
+                
         public Program()
         {
-            actions = new Dictionary<string, Func<string[], int>>
+            actions = new Dictionary<string, Action<string[]>>
             {
                 { "new", CreateRepository },
                 { "destroy", DestroyRepository },
@@ -65,11 +29,25 @@ The directory contents are kept untouched.
             };
         }
 
+        string user, password;
+
         int Run(string[] args)
         {
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             Print("NestorGithub 1.0 - (c) Konamiman 2018\r\n\r\n");
+
+            if(args.Length > 0 && args[0].Equals("-a", StringComparison.InvariantCultureIgnoreCase))
+            {
+                user = "";
+                password = "";
+                args = args.Skip(1).ToArray();
+            }
+            else
+            {
+                user = Configuration.GithubUser.Trim();
+                password = Configuration.GithubPasswordOrToken;
+            }
 
             if(args.Length == 0 || !actions.Keys.Contains(args[0], StringComparer.CurrentCultureIgnoreCase))
             {
@@ -77,14 +55,10 @@ The directory contents are kept untouched.
                 return 0;
             }
 
-            var user = Configuration.GithubUser;
-            var password = Configuration.GithubPasswordOrToken;
-            var http = new HttpClient();
-            api = new ApiClient(http, user, password);
-
             try
             {
-                return actions[args[0]](args.Skip(1).ToArray());
+                actions[args[0]](args.Skip(1).ToArray());
+                return 0;
             }
             catch (ApiException ex)
             {
@@ -97,117 +71,43 @@ The directory contents are kept untouched.
                 Print($"*** {ex.Message}\r\n");
                 return 1;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!Debugger.IsAttached)
             {
-                Print($"*** {ex.GetType().Name}: {ex.Message}\r\n");
+                Print($"*** {ex.GetType().Name}: {ex.Message}\r\n{ex.StackTrace}");
                 return 1;
             }
         }
 
-        int CreateRepository(string[] args)
+        LocalRepository GetExistingLocalRepository(FilesystemDirectory localDirectory)
         {
-            if(args.Length == 0 || (args.Length == 1 && args[0].StartsWith("-")))
-            {
-                Print("*** Repository name is required");
-                return 1;
-            }
-
-            var isPrivate = false;
-            if(args[0].Equals("-p", StringComparison.InvariantCultureIgnoreCase))
-            {
-                isPrivate = true;
-                args = args.Skip(1).ToArray();
-            }
-            else if(args[0].StartsWith("-"))
-            {
-                Print($"*** Unknown parameter {args[0]}");
-                return 1;
-            }
-
-            var repositoryName = args[0];
-            var respositoryDescription = args.Skip(1).JoinWithSpaces();
-
-            var result = api.CreateRepository(repositoryName, respositoryDescription, isPrivate);
-            Print($"Repository {result.RespositoryFullName} created successfully");
-
-            return 0;
+            var repositoryName = LocalRepository.GetRepositoryNameFor(localDirectory.PhysicalPath);
+            var api = GetApi(repositoryName);
+            return new LocalRepository(localDirectory, GetApi(repositoryName));
         }
 
-        int DestroyRepository(string[] args)
+        ApiClient GetApi(string fullRepositoryName)
         {
-            if (args.Length == 0)
-            {
-                Print("*** Repository name is required");
-                return 1;
-            }
-
-            var repositoryName = args[0];
-
-            Print(
-$@"WARNING! WARNING! WARNING!
-
-This action cannot be undone.
-This will permanently delete the {Configuration.GithubUser}/{repositoryName} repository, wiki, issues, and comments, and remove all collaborator associations.
-
-Please type in the name of the repository to confirm (or press Enter to cancel): ");
-
-            var typedRespositoryName = Console.ReadLine();
-            if(typedRespositoryName != repositoryName)
-            {
-                Print("Operation cancelled\r\n");
-                return 0;
-            }
-
-            api.DeleteRepository(repositoryName);
-
-            Print($"Repository {Configuration.GithubUser}/{repositoryName} successfully deleted");
-            return 0;
-        }
-
-        int CloneRepository(string[] args, bool linkOnly)
-        {
-            if (args.Length == 0)
-            {
-                Print("*** Repository name is required");
-                return 1;
-            }
-
-            var repositoryName = FullRepositoryName(args[0]);
-            if(repositoryName.StartsWith("/"))
-            {
-                Print("*** Username is not configured, please specify a full repository name (user/repository)");
-                return 1;
-            }
-
-            var directory = new FilesystemDirectory(args.Length > 1 ? args[1] : null);
-            var localRepository = new LocalRepository(directory, api);
-
-            localRepository.Clone(repositoryName, linkOnly);
-
-            return 0;
-        }
-
-        int UnlinkRepository(string[] args)
-        {
-            var directory = new FilesystemDirectory(args.Length > 0 ? args[0] : null);
-            var localRepository = new LocalRepository(directory, null);
-
-            localRepository.Unlink();
-
-            return 0;
-        }
-
-        void Print(string text)
-        {
-            Console.Write(text);
+            return new ApiClient(new HttpClient(), user, password, fullRepositoryName);
         }
 
         string FullRepositoryName(string repositoryName)
         {
-            if (repositoryName.Contains("/"))
+            if (IsFullRepositoryName(repositoryName))
                 return repositoryName;
-            else
-                return $"{Configuration.GithubUser}/{repositoryName}";
+
+            if (user == "")
+              throw new InvalidOperationException("Username is not configured, please specify a full repository name (user/repository)");
+
+            return $"{user}/{repositoryName}";
+        }
+
+        bool IsFullRepositoryName(string name) => name.Contains("/");
+
+        Exception BadParameter(string message) => new InvalidOperationException(message);
+
+        void Print(string text)
+        {
+            Printer.Print(text);
         }
     }
 }

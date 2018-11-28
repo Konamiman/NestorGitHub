@@ -8,52 +8,66 @@ namespace Konamiman.NestorGithub
         const string databaseDirectory = ".ngh";
         const string stateFileName = "state";
         const string treeFileName = "tree";
+        private static readonly string stateFilePath;
+        private static readonly string treeFilePath;
 
         private readonly FilesystemDirectory directory;
         private readonly ApiClient api;
-        private readonly string stateFilePath;
-        private readonly string treeFilePath;
 
-        private string fullRepositoryName;
-        private string branchName;
         private string commitSha;
 
-        public LocalRepository(FilesystemDirectory directory, ApiClient api)
+        public string FullRepositoryName { get; private set; }
+        public string BranchName { get; private set; }
+
+        static LocalRepository()
+        {
+            stateFilePath = FilesystemDirectory.CombinePath(databaseDirectory, stateFileName);
+            treeFilePath = FilesystemDirectory.CombinePath(databaseDirectory, treeFileName);
+        }
+
+        public LocalRepository(FilesystemDirectory directory, ApiClient api, bool allowNonLinkedDirectory = false)
         {
             this.directory = directory;
             this.api = api;
+            this.FullRepositoryName = GetRepositoryNameFor(directory.PhysicalPath, allowNonLinkedDirectory);
 
-            this.stateFilePath = FilesystemDirectory.CombinePath(databaseDirectory, stateFileName);
-            this.treeFilePath = FilesystemDirectory.CombinePath(databaseDirectory, treeFileName);
+            if (IsInitialized)
+                ParseStateFile();
         }
 
         public bool HasContents => directory.HasContents;
 
         public bool IsInitialized => directory.DirectoryExists(databaseDirectory);
 
-        public void Clone(string fullRepositoryName, bool linkOnly)
+        public static string GetRepositoryNameFor(string localPath, bool allowNonLinkedDirectory = false)
         {
-            this.fullRepositoryName = fullRepositoryName;
-            directory.CreateIfNotExists();
+            var directory = new FilesystemDirectory(localPath);
+            if (directory.FileExists(stateFilePath))
+                return directory.ReadTextFile(stateFilePath).SplitInLines()[0];
 
-            bool alreadyInitialized = false;
-            if (this.IsInitialized)
+            if (allowNonLinkedDirectory)
+                return null;
+            else
+                throw new InvalidOperationException($"{localPath} is not linked to any remote repository");
+        }
+
+        public void Clone(string fullRepositoryName)
+        {
+            if (IsInitialized && fullRepositoryName != this.FullRepositoryName)
             {
-                ParseStateFile();
-                if (linkOnly || (fullRepositoryName != this.fullRepositoryName))
-                {
-                    throw new InvalidOperationException($"The repository at '{directory.PhysicalPath}' is already initialized for repository {this.fullRepositoryName}");
-                }
-                alreadyInitialized = true;
+                throw new InvalidOperationException($"The repository at '{directory.PhysicalPath}' is already initialized for repository {this.FullRepositoryName}");
             }
-            else if (!linkOnly && directory.HasContents)
+            else if (!IsInitialized && directory.HasContents)
             {
                 throw new InvalidOperationException($"The target directory '{directory.PhysicalPath}' is not empty");
             }
 
+            directory.CreateIfNotExists();
+            this.FullRepositoryName = fullRepositoryName;
+
             RepositoryFileReference[] treeFiles = null;
 
-            if (alreadyInitialized)
+            if (IsInitialized)
             {
                 PrintLine($"Respository {fullRepositoryName} already initialized, continuing the clone process\r\n");
                 treeFiles = ParseTreeFile();
@@ -62,72 +76,80 @@ namespace Konamiman.NestorGithub
             {
                 PrintLine("Getting repository information...");
 
-                branchName = "master";
-                string branchCommitSha = null;
+                BranchName = api.GetRepositoryInfo().DefaultBranch;
+                commitSha = null;
 
                 try
                 {
-                    branchCommitSha = api.GetBranchCommitSha(fullRepositoryName, branchName);
-                    if (branchCommitSha == null)
-                    {
-                        var branches = api.GetBranchNames(fullRepositoryName);
-                        branchName = branches.First();
-                        branchCommitSha = api.GetBranchCommitSha(fullRepositoryName, branchName);
-                    }
+                    commitSha = api.GetBranchCommitSha(BranchName);
                 }
-                catch (ApiException ex) when (linkOnly && ex.StatusCode == 409)
+                catch (ApiException ex) when (ex.StatusCode == 409)
                 {
-                    //409 = no commits exist, whe don't care when just linking
+                    throw new InvalidOperationException($"The repository {fullRepositoryName} is empty, please use 'link' instead of 'clone'");
                 }
 
-                if (branchCommitSha == null)
+                var treeSha = api.GetCommitData(commitSha);
+                treeFiles = api.GetTreeFiles(commitSha);
+
+                UpdateStateFile();
+                UpdateTreeFile(treeFiles);
+            }
+
+            PrintLine($"Getting files for branch {BranchName}");
+            foreach (var file in treeFiles)
+            {
+                if (directory.FileExists(file.Path) && directory.GetFileSize(file.Path) == file.Size)
                 {
-                    UpdateStateFile(fullRepositoryName, branchName, null);
+                    PrintLine($"  {file.Path} - already exists, skipping");
                 }
                 else
                 {
-                    var treeSha = api.GetCommitData(fullRepositoryName, branchCommitSha);
-                    treeFiles = api.GetTreeFiles(fullRepositoryName, branchCommitSha);
-
-                    UpdateStateFile(fullRepositoryName, branchName, branchCommitSha);
-                    UpdateTreeFile(treeFiles);
+                    PrintLine($"  {file.Path} ...");
+                    DownloadFile(file);
                 }
-            }
-
-            if (linkOnly)
-            {
-                PrintLine($"{directory.PhysicalPath} has been linked to {fullRepositoryName} on branch {branchName}");
-            }
-            else
-            {
-                PrintLine($"Getting files for branch {branchName}");
-                foreach (var file in treeFiles)
-                {
-                    if (directory.FileExists(file.Path))
-                    {
-                        PrintLine($"  {file.Path} - already exists, skipping");
-                    }
-                    else
-                    {
-                        PrintLine($"  {file.Path} ...");
-                        DownloadFile(file);
-                    }
-                }
-
-                PrintLine($"\r\nRepository {fullRepositoryName} has been cloned at {directory.PhysicalPath}");
             }
         }
 
-        RepositoryFileReference[] ParseTreeFile()
+        public void Link(string fullRepositoryName)
         {
-            return directory
-                .ReadTextFile(treeFilePath)
-                .SplitInLines()
-                .Select(line => {
-                    var parts = line.SplitBySpace();
-                    return new RepositoryFileReference { BlobSha = parts[0], Path = parts[1] };
-                })
-                .ToArray();
+            if (!directory.Exists)
+                throw new InvalidOperationException($"Directory {directory.PhysicalPath} does not exist");
+
+            if (this.IsInitialized)
+            {
+                throw new InvalidOperationException($"The repository at '{directory.PhysicalPath}' is already initialized for repository {this.FullRepositoryName}");
+            }
+
+            this.FullRepositoryName = fullRepositoryName;
+
+            RepositoryFileReference[] treeFiles = null;
+
+            PrintLine("Getting repository information...");
+
+            BranchName = api.GetRepositoryInfo().DefaultBranch;
+            commitSha = null;
+
+            try
+            {
+                commitSha = api.GetBranchCommitSha(BranchName);
+            }
+            catch (ApiException ex) when (ex.StatusCode == 409)
+            {
+                //409 = no commits exist, whe don't care when just linking
+            }
+
+            if (commitSha == null)
+            {
+                UpdateStateFile();
+            }
+            else
+            {
+                var treeSha = api.GetCommitData(commitSha);
+                treeFiles = api.GetTreeFiles(commitSha);
+
+                UpdateStateFile();
+                UpdateTreeFile(treeFiles);
+            }
         }
 
         public void Unlink()
@@ -145,24 +167,35 @@ namespace Konamiman.NestorGithub
             ParseStateFile();
 
             directory.DeleteDirectory(databaseDirectory);
-            PrintLine($"Directory {directory.PhysicalPath} has been unlinked from remote repository {fullRepositoryName}");
         }
 
-        private void UpdateStateFile(string fullRespositoryName, string branchName, string branchSha)
+        RepositoryFileReference[] ParseTreeFile()
         {
-            directory.CreateFile($"{fullRespositoryName}\r\n{branchName}\r\n{branchSha}\r\n", stateFilePath);
+            return directory
+                .ReadTextFile(treeFilePath)
+                .SplitInLines()
+                .Select(line => {
+                    var parts = line.SplitBySpace(3);
+                    return new RepositoryFileReference { BlobSha = parts[0], Size = long.Parse(parts[1]), Path = parts[2] };
+                })
+                .ToArray();
+        }
+
+        private void UpdateStateFile()
+        {
+            directory.CreateFile($"{FullRepositoryName}\r\n{BranchName}\r\n{commitSha}\r\n", stateFilePath);
         }
 
         private void UpdateTreeFile(RepositoryFileReference[] fileReferences)
         {
-            var fileLines = fileReferences.Select(fr => $"{fr.BlobSha} {fr.Path}");
+            var fileLines = fileReferences.Select(fr => $"{fr.BlobSha} {fr.Size} {fr.Path}");
 
             directory.CreateFile(fileLines.JoinInLines(), treeFilePath);
         }
 
         private void DownloadFile(RepositoryFileReference fileReference)
         {
-            var fileContents = api.GetBlob(fullRepositoryName, fileReference.BlobSha);
+            var fileContents = api.GetBlob(fileReference.BlobSha);
             directory.CreateFile(fileContents, fileReference.Path);
         }
 
@@ -170,8 +203,8 @@ namespace Konamiman.NestorGithub
         {
             var stateFileContents = directory.ReadTextFile(stateFilePath);
             var stateFileParts = stateFileContents.SplitInLines(removeEmptyEntries: false);
-            this.fullRepositoryName = stateFileParts[0];
-            this.branchName = stateFileParts[1];
+            this.FullRepositoryName = stateFileParts[0];
+            this.BranchName = stateFileParts[1];
             this.commitSha = stateFileParts[2];
         }
 

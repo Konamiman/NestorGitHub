@@ -6,10 +6,8 @@ using System.Threading.Tasks;
 
 namespace Konamiman.NestorGithub
 {
-    class RepositoryFileReference
+    class RepositoryInfo
     {
-        public string Path { get; set; }
-        public long Size { get; set; }
-        public string BlobSha { get; set; }
+        public string DefaultBranch { get; set; }
     }
 }

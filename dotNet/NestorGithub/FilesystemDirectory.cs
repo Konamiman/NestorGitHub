@@ -1,5 +1,4 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.Text;
 
 namespace Konamiman.NestorGithub
@@ -52,6 +51,12 @@ namespace Konamiman.NestorGithub
             {
                 Directory.Delete(Combine(path), recursive: true);
             }
+        }
+
+        public long GetFileSize(string path)
+        {
+            var fileInfo = new FileInfo(Combine(path));
+            return fileInfo.Length;
         }
 
         private string Combine(params string[] pathSegments)

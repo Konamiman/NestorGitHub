@@ -8,25 +8,36 @@ namespace Konamiman.NestorGithub
 {
     class ApiClient
     {
-        private readonly string user;
         private readonly IHttpClient httpClient;
 
-        public ApiClient(IHttpClient httpClient, string user, string passwordOrToken)
+        public ApiClient(IHttpClient httpClient, string user, string passwordOrToken, string fullRepositoryName)
         {
-            this.user = user;
+            if (!fullRepositoryName.Contains("/"))
+                throw new ArgumentException($"{fullRepositoryName} is not a valid full repository name (it doesn't contain '/')");
+
+            this.FullRepositoryName = fullRepositoryName;
 
             this.httpClient = httpClient;
             httpClient.SetUrl("https://api.github.com");
-            httpClient.SetHeaders(new Dictionary<string, string>
+
+            var headers = new Dictionary<string, string>
             {
                 { "User-Agent", "NestorGithub for .NET" },
-                { "Accept", "application/vnd.github.v3+json" },
-                { "Authorization", "Basic " + Convert.ToBase64String(Encoding.ASCII.GetBytes($"{user}:{passwordOrToken}")) }
-            });
+                { "Accept", "application/vnd.github.v3+json" }
+            };
+
+            if (!string.IsNullOrWhiteSpace(user))
+                headers.Add("Authorization", "Basic " + Convert.ToBase64String(Encoding.ASCII.GetBytes($"{user}:{passwordOrToken}")));
+
+            httpClient.SetHeaders(headers);
         }
 
-        public CreateRepositoryResponse CreateRepository(string name, string description, bool @private = false)
+        public string FullRepositoryName { get; }
+
+        public CreateRepositoryResponse CreateRepository(string description, bool @private = false)
         {
+            var name = FullRepositoryName.SplitBySlash()[1];
+
             var input = $@"
 {{
   ""name"": {name.AsJson()},
@@ -38,30 +49,30 @@ namespace Konamiman.NestorGithub
             return new CreateRepositoryResponse() { RespositoryFullName = response.AsJsonObject().Value<string>("full_name") };
         }
 
-        public void DeleteRepository(string name)
+        public void DeleteRepository()
         {
-            Delete($"/repos/{user}/{name}");
+            Delete($"/repos/{FullRepositoryName}");
         }
 
-        public string GetBranchCommitSha(string fullRepositoryName, string branchName)
+        public string GetBranchCommitSha(string branchName)
         {
-            var response = Get($"/repos/{fullRepositoryName}/git/refs/heads/{branchName}", returnNullWhenNotFound: true);
+            var response = Get($"/repos/{FullRepositoryName}/git/refs/heads/{branchName}", returnNullWhenNotFound: true);
             if (response == null)
                 return null;
 
             return response.AsJsonObject().Value<JsonObject>("object").Value<string>("sha");
         }
 
-        public string[] GetBranchNames(string fullRepositoryName)
+        public string[] GetBranchNames()
         {
-            var response = Get($"/repos/{fullRepositoryName}/git/refs/heads");
+            var response = Get($"/repos/{FullRepositoryName}/git/refs/heads");
 
             return response.AsArrayOfJsonObjects().Select(o => o.Value<string>("ref").Substring("refs/heads/".Length)).ToArray();
         }
 
-        public CommitData GetCommitData(string fullRepositoryName, string commitSha)
+        public CommitData GetCommitData(string commitSha)
         {
-            var response = Get($"/repos/{fullRepositoryName}/git/commits/{commitSha}").AsJsonObject();
+            var response = Get($"/repos/{FullRepositoryName}/git/commits/{commitSha}").AsJsonObject();
             var authorData = response.Value<JsonObject>("author");
             var treeData = response.Value<JsonObject>("tree");
             return new CommitData
@@ -74,21 +85,30 @@ namespace Konamiman.NestorGithub
             };
         }
 
-        public RepositoryFileReference[] GetTreeFiles(string fullRepositoryName, string commitSha)
+        public RepositoryFileReference[] GetTreeFiles(string commitSha)
         {
-            var treeSha = GetCommitData(fullRepositoryName, commitSha).TreeSha;
-            var response = Get($"/repos/{fullRepositoryName}/git/trees/{treeSha}?recursive=1").AsJsonObject();
+            var treeSha = GetCommitData(commitSha).TreeSha;
+            var response = Get($"/repos/{FullRepositoryName}/git/trees/{treeSha}?recursive=1").AsJsonObject();
             var treeData = response.Value<JsonObject[]>("tree");
             return treeData
                 .Where(item => item.Value<string>("type") == "blob")
-                .Select(item => new RepositoryFileReference { Path = item.Value<string>("path"), BlobSha = item.Value<string>("sha") })
+                .Select(item => new RepositoryFileReference {
+                    Path = item.Value<string>("path"),
+                    Size = long.Parse(item.Value<string>("size")),
+                    BlobSha = item.Value<string>("sha") })
                 .ToArray();
         }
 
-        public byte[] GetBlob(string fullRepositoryName, string blobSha)
+        public byte[] GetBlob(string blobSha)
         {
-            var result = Get($"/repos/{fullRepositoryName}/git/blobs/{blobSha}").AsJsonObject();
+            var result = Get($"/repos/{FullRepositoryName}/git/blobs/{blobSha}").AsJsonObject();
             return Convert.FromBase64String(result.Value<string>("content"));
+        }
+
+        public RepositoryInfo GetRepositoryInfo()
+        {
+            var result = Get($"/repos/{FullRepositoryName}").AsJsonObject();
+            return new RepositoryInfo { DefaultBranch = result.Value<string>("default_branch") };
         }
 
         private string Get(string path, bool returnNullWhenNotFound = false)
