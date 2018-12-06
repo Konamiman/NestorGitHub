@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Text;
 
 namespace Konamiman.NestorGithub
@@ -10,7 +11,7 @@ namespace Konamiman.NestorGithub
 
         public FilesystemDirectory(string path = null)
         {
-            this.rootPath = path ?? Directory.GetCurrentDirectory();
+            this.rootPath = (path ?? Directory.GetCurrentDirectory()).Replace(Path.DirectorySeparatorChar, '/');
         }
 
         public string PhysicalPath => rootPath;
@@ -40,6 +41,11 @@ namespace Konamiman.NestorGithub
             File.WriteAllBytes(fileInfo.FullName, contents);
         }
 
+        public byte[] GetFileContents(params string[] pathSegments)
+        {
+            return File.ReadAllBytes(Combine(pathSegments));
+        }
+
         public string ReadTextFile(string path)
         {
             return File.ReadAllText(Combine(rootPath, path), Encoding.UTF8);
@@ -67,6 +73,49 @@ namespace Konamiman.NestorGithub
         public static string CombinePath(params string[] pathSegments)
         {
             return Path.Combine(pathSegments).Replace(Path.DirectorySeparatorChar, '/');
+        }
+
+        public bool IsModified(params string[] pathSegments)
+        {
+            var filePath = Combine(pathSegments);
+            return (File.GetAttributes(filePath) & FileAttributes.Archive) == FileAttributes.Archive;
+        }
+
+        public void SetModified(params string[] pathSegments)
+        {
+            var filePath = Combine(pathSegments);
+            var currentAttributes = File.GetAttributes(filePath);
+            File.SetAttributes(filePath, currentAttributes | FileAttributes.Archive);
+        }
+
+        public void SetUnmodified(params string[] pathSegments)
+        {
+            var filePath = Combine(pathSegments);
+            var currentAttributes = File.GetAttributes(filePath);
+            File.SetAttributes(filePath, currentAttributes & ~FileAttributes.Archive);
+        }
+
+        public void DoForAllFiles(Func<string, bool> action)
+        {
+            DoForAllFilesCore(rootPath, action);
+        }
+
+        private bool DoForAllFilesCore(string directory, Func<string, bool> action)
+        {
+            foreach(var file in Directory.GetFiles(directory))
+            {
+                var relativeFile = file.Replace(Path.DirectorySeparatorChar, '/').Replace(rootPath, "").Trim('/');
+                var continues = action(relativeFile);
+                if(!continues) return false;
+            }
+
+            foreach(var subdirectory in Directory.GetDirectories(directory))
+            {
+                var continues = DoForAllFilesCore(subdirectory, action);
+                if (!continues) return false;
+            }
+
+            return true;
         }
     }
 }

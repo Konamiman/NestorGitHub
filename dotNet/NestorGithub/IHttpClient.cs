@@ -9,6 +9,6 @@ namespace Konamiman.NestorGithub
 
         void SetUrl(string url);
 
-        HttpResponse ExecuteRequest(HttpMethod method, string path, string content = null);
+        HttpResponse<T> ExecuteRequest<T>(HttpMethod method, string path, string content = null, string accept = null) where T : class;
     }
 }

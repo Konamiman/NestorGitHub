@@ -25,11 +25,18 @@ namespace Konamiman.NestorGithub
             httpClient = new System.Net.Http.HttpClient();
         }
 
-        public HttpResponse ExecuteRequest(HttpMethod method, string path, string content = null)
+        public HttpResponse<T> ExecuteRequest<T>(HttpMethod method, string path, string content = null, string accept = null) where T:class
         {
+            bool isBinary = false;
+            if (typeof(T) == typeof(byte[]))
+                isBinary = true;
+            else if (typeof(T) != typeof(string))
+                throw new ArgumentException("The generic type must be either string or byte[]");
+
             var request = new HttpRequestMessage(method, path);
             if (content != null) request.Content = new StringContent(content, Encoding.UTF8, "application/json");
-            var response = new HttpResponse();
+            request.Headers.Add("Accept", isBinary ? "application/vnd.github.v3.raw" : "application/vnd.github.v3+json");
+            var response = new HttpResponse<T>();
 
             var task = httpClient.SendAsync(request)
                 .ContinueWith((taskwithmsg) =>
@@ -38,9 +45,18 @@ namespace Konamiman.NestorGithub
                     response.StatusCode = (int)r.StatusCode;
                     response.StatusMessage = r.ReasonPhrase;
 
-                    var readTask = r.Content.ReadAsStringAsync();
-                    readTask.Wait();
-                        response.Content = readTask.Result;
+                    if (isBinary)
+                    {
+                        var readTask = r.Content.ReadAsByteArrayAsync();
+                        readTask.Wait();
+                        response.Content = readTask.Result as T;
+                    }
+                    else
+                    {
+                        var readTask = r.Content.ReadAsStringAsync();
+                        readTask.Wait();
+                        response.Content = readTask.Result as T;
+                    }
                 });
             task.Wait();
 

@@ -35,6 +35,11 @@ and no files are downloaded.
 
 Unlinks the local directory from the remote repository.
 The directory contents are kept untouched.
+
+
+  ngh commit [-d <local directory>] <message>
+
+Commits and pushes local changes.
 ";
     }
 }

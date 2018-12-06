@@ -7,5 +7,7 @@ namespace Konamiman.NestorGithub
     {
         public static string GithubUser => ConfigurationManager.AppSettings["GithubUser"];
         public static string GithubPasswordOrToken => ConfigurationManager.AppSettings["GithubPasswordOrToken"];
+        public static string AuthorName => ConfigurationManager.AppSettings["AuthorName"];
+        public static string AuthorEmail => ConfigurationManager.AppSettings["AuthorEmail"];
     }
 }

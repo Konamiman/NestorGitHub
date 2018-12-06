@@ -1,10 +1,10 @@
 ﻿namespace Konamiman.NestorGithub
 {
-    class HttpResponse
+    class HttpResponse<T> where T:class
     {
         public int StatusCode { get; set; }
         public string StatusMessage { get; set; }
-        public string Content { get; set; }
+        public T Content { get; set; }
 
         public bool IsSuccess => StatusCode >= 200 && StatusCode < 300;
         public bool IsError => !IsSuccess;

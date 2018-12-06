@@ -9,9 +9,14 @@ namespace Konamiman.NestorGithub
             if (args.Length == 0)
                 throw BadParameter("Repository name is required");
 
-            var repositoryName = FullRepositoryName(args[0]);
+            var suppliedRepositoryName = FullRepositoryName(args[0]);
             var directory = new FilesystemDirectory(args.ElementAtOrDefault(1));
-            var api = GetApi(repositoryName);
+            var api = GetApi(suppliedRepositoryName);
+
+            var repositoryName = api.GetProperlyCasedRepositoryName();
+            if(repositoryName == null)
+                throw BadParameter($"There's no repository named {suppliedRepositoryName} in GitHub (visible to you, at least)");
+
             var localRepository = new LocalRepository(directory, api, allowNonLinkedDirectory: true);
 
             if (linkOnly)
@@ -25,6 +30,5 @@ namespace Konamiman.NestorGithub
                 Print($"\r\nRepository {repositoryName} has been cloned at {directory.PhysicalPath}");
             }
         }
-
     }
 }

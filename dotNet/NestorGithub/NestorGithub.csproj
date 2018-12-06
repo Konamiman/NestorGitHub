@@ -59,8 +59,12 @@
     <Compile Include="JsonObject.cs" />
     <Compile Include="ListRepositoriesResponse.cs" />
     <Compile Include="LocalRepository.cs" />
+    <Compile Include="LocalRepositoryChanges.cs" />
     <Compile Include="Printer.cs" />
     <Compile Include="Program.CloneRepository.cs">
+      <DependentUpon>Program.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Program.Commit.cs">
       <DependentUpon>Program.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.CreateRepository.cs">
@@ -68,6 +72,9 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Program.DestroyRepository.cs">
+      <DependentUpon>Program.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Program.Status.cs">
       <DependentUpon>Program.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.UnlinkRepository.cs">

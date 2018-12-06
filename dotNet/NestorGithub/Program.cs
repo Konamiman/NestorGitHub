@@ -10,6 +10,11 @@ namespace Konamiman.NestorGithub
     {
         static int Main(string[] args)
         {
+            if(Debugger.IsAttached)
+                //args = new[] { "commit", "-d", @"c:\temp\nex", "First commit from NestorGithub!!"};
+                //args = new[] { "clone", "sandbox", @"c:\temp\nex" };
+                args = new[] { "status", @"c:\temp\nex" };
+
             var result = new Program().Run(args);
             if (Debugger.IsAttached) Console.ReadKey();
             return result;
@@ -25,7 +30,9 @@ namespace Konamiman.NestorGithub
                 { "destroy", DestroyRepository },
                 { "clone", args => CloneRepository(args, false) },
                 { "link", args => CloneRepository(args, true) },
-                { "unlink", UnlinkRepository }
+                { "unlink", UnlinkRepository },
+                { "status", Status },
+                { "commit", Commit }
             };
         }
 
@@ -49,7 +56,7 @@ namespace Konamiman.NestorGithub
                 password = Configuration.GithubPasswordOrToken;
             }
 
-            if(args.Length == 0 || !actions.Keys.Contains(args[0], StringComparer.CurrentCultureIgnoreCase))
+             if (args.Length == 0 || !actions.Keys.Contains(args[0], StringComparer.CurrentCultureIgnoreCase))
             {
                 Print(explanation);
                 return 0;
@@ -62,8 +69,7 @@ namespace Konamiman.NestorGithub
             }
             catch (ApiException ex)
             {
-                Print($"*** {ex.Message}\r\n");
-                Print(ex.Errors.Select(e => e.Select(kvp => $"{kvp.Key} = {kvp.Value}").JoinInLines()).JoinInLines());
+                Print($"*** {ex.Message}\r\n{ex.PrintableErrorsList}");
                 return 1;
             }
             catch (InvalidOperationException ex)
@@ -108,6 +114,11 @@ namespace Konamiman.NestorGithub
         void Print(string text)
         {
             Printer.Print(text);
+        }
+
+        void PrintLine(string text)
+        {
+            Printer.PrintLine(text);
         }
     }
 }

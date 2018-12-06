@@ -12,6 +12,9 @@ namespace Konamiman.NestorGithub
         public static string AsJson(this bool value) =>
             value ? "true" : "false";
 
+        public static string Value(this JsonObject jsonObject, string key, bool returnDefaultOnMissingKey = false) =>
+            jsonObject.Value<string>(key, returnDefaultOnMissingKey);
+
         public static JsonObject AsJsonObject(this string value) =>
             new JsonObject((JObject)JsonConvert.DeserializeObject(value));
 

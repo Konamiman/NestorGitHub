@@ -9,6 +9,8 @@ namespace Konamiman.NestorGithub
     class ApiClient
     {
         private readonly IHttpClient httpClient;
+        private readonly string repositoryOwner;
+        private readonly string repositoryName;
 
         public ApiClient(IHttpClient httpClient, string user, string passwordOrToken, string fullRepositoryName)
         {
@@ -16,6 +18,9 @@ namespace Konamiman.NestorGithub
                 throw new ArgumentException($"{fullRepositoryName} is not a valid full repository name (it doesn't contain '/')");
 
             this.FullRepositoryName = fullRepositoryName;
+            var repositoryNameParts = fullRepositoryName.SplitBySlash();
+            repositoryOwner = repositoryNameParts[0];
+            repositoryName = repositoryNameParts[1];
 
             this.httpClient = httpClient;
             httpClient.SetUrl("https://api.github.com");
@@ -46,7 +51,7 @@ namespace Konamiman.NestorGithub
 }}";
 
             var response = Post("/user/repos", input);
-            return new CreateRepositoryResponse() { RespositoryFullName = response.AsJsonObject().Value<string>("full_name") };
+            return new CreateRepositoryResponse() { RespositoryFullName = response.AsJsonObject().Value("full_name") };
         }
 
         public void DeleteRepository()
@@ -56,85 +61,209 @@ namespace Konamiman.NestorGithub
 
         public string GetBranchCommitSha(string branchName)
         {
-            var response = Get($"/repos/{FullRepositoryName}/git/refs/heads/{branchName}", returnNullWhenNotFound: true);
-            if (response == null)
-                return null;
-
-            return response.AsJsonObject().Value<JsonObject>("object").Value<string>("sha");
+            var query = GraphqlQueryForRepository($"ref (qualifiedName: {branchName.AsJson()}) {{ commit: target {{ ... on Commit {{ oid }} }} }}");
+            var result = DoGraphQl(query);
+            if (!result.HasValue("repository/ref")) return null;
+            return result.Value("repository/ref/commit/oid");
         }
 
-        public string[] GetBranchNames()
+        public void SetBranchCommitSha(string branchName, string commitSha, bool force = false)
         {
-            var response = Get($"/repos/{FullRepositoryName}/git/refs/heads");
+            var input = $@"
+{{
+  ""sha"": {commitSha.AsJson()},
+  ""force"": {force.AsJson()}
+}}";
 
-            return response.AsArrayOfJsonObjects().Select(o => o.Value<string>("ref").Substring("refs/heads/".Length)).ToArray();
+            Patch($"/repos/{FullRepositoryName}/git/refs/heads/{branchName}", input);
         }
 
-        public CommitData GetCommitData(string commitSha)
+        public string GetCommitTreeSha(string commitSha)
         {
-            var response = Get($"/repos/{FullRepositoryName}/git/commits/{commitSha}").AsJsonObject();
-            var authorData = response.Value<JsonObject>("author");
-            var treeData = response.Value<JsonObject>("tree");
-            return new CommitData
-            {
-                Sha = commitSha,
-                TreeSha = treeData.Value<string>("sha"),
-                AuthorName = authorData.Value<string>("name"),
-                AuthorEmail = authorData.Value<string>("email"),
-                Date = DateTime.Parse(authorData.Value<string>("date"))
-            };
+            var query = GraphqlQueryForRepository($"object(oid: {commitSha.AsJson()}) {{ ...on Commit {{ tree {{ oid }} }} }}");
+            var result = DoGraphQl(query);
+            return result.Value("repository/object/tree/oid");
         }
 
-        public RepositoryFileReference[] GetTreeFiles(string commitSha)
+        public string CreateCommit(string message, string treeSha, string parentSha, string authorName, string authorEmail)
         {
-            var treeSha = GetCommitData(commitSha).TreeSha;
-            var response = Get($"/repos/{FullRepositoryName}/git/trees/{treeSha}?recursive=1").AsJsonObject();
+            var json = $@"
+{{
+    ""message"": {message.AsJson()},
+    ""tree"": ""{treeSha}""
+";
+            if (parentSha != null)
+                json += $@", ""parents"": [ ""{parentSha}"" ]
+";
+
+            if(!string.IsNullOrEmpty(authorName))
+                json += $@", ""author"": {{ ""name"": {authorName.AsJson()}, ""email"": {authorEmail.AsJson()} }}
+";
+
+            json += "}";
+
+            var result = Post($"/repos/{FullRepositoryName}/git/commits", json).AsJsonObject();
+
+            var sha = result.Value("sha");
+            return sha;
+        }
+
+
+        public RepositoryFileReference[] GetTreeFileReferences(string treeSha)
+        {
+            var response = Get<string>($"/repos/{FullRepositoryName}/git/trees/{treeSha}?recursive=1").AsJsonObject();
             var treeData = response.Value<JsonObject[]>("tree");
             return treeData
-                .Where(item => item.Value<string>("type") == "blob")
+                .Where(item => item.Value("type") == "blob")
                 .Select(item => new RepositoryFileReference {
-                    Path = item.Value<string>("path"),
-                    Size = long.Parse(item.Value<string>("size")),
-                    BlobSha = item.Value<string>("sha") })
+                    Path = item.Value("path"),
+                    Size = long.Parse(item.Value("size")),
+                    BlobSha = item.Value("sha") })
                 .ToArray();
+        }
+
+        public string CreateTree(RepositoryFileReference[] files)
+        {
+            var sb = new StringBuilder(@"{ ""tree"": [");
+            foreach (var file in files)
+            {
+                sb.Append($@"
+{{
+    ""path"": {file.Path.AsJson()},
+    ""mode"": ""100644"",
+    ""type"": ""blob"",
+    ""sha"": ""{file.BlobSha}""
+}},");
+            }
+            sb.Remove(sb.Length - 1, 1);
+            sb.Append("] }");
+
+            var result = Post($"/repos/{FullRepositoryName}/git/trees", sb.ToString()).AsJsonObject();
+
+            var sha = result.Value("sha");
+            return sha;
         }
 
         public byte[] GetBlob(string blobSha)
         {
-            var result = Get($"/repos/{FullRepositoryName}/git/blobs/{blobSha}").AsJsonObject();
-            return Convert.FromBase64String(result.Value<string>("content"));
+            return Get<byte[]>($"/repos/{FullRepositoryName}/git/blobs/{blobSha}");
+        }
+
+        public string CreateBlob(byte[] blobContents)
+        {
+            var input = $@"
+{{
+  ""content"": {Convert.ToBase64String(blobContents).AsJson()},
+  ""encoding"": ""base64""
+}}";
+
+            var result = Post($"/repos/{FullRepositoryName}/git/blobs", input).AsJsonObject();
+            var sha = result.Value("sha");
+            return sha;
         }
 
         public RepositoryInfo GetRepositoryInfo()
         {
-            var result = Get($"/repos/{FullRepositoryName}").AsJsonObject();
-            return new RepositoryInfo { DefaultBranch = result.Value<string>("default_branch") };
+            var query = GraphqlQueryForRepository("defaultBranchRef { name }");
+            var result = DoGraphQl(query);
+            var defaultBranch = result.Value("repository/defaultBranchRef/name");
+            return new RepositoryInfo { DefaultBranch = defaultBranch };
         }
 
-        private string Get(string path, bool returnNullWhenNotFound = false)
+        public bool RepositoryExists()
         {
-            return DoApi(() => httpClient.ExecuteRequest(HttpMethod.Get, path), returnNullWhenNotFound);
+            var query = GraphqlQueryForRepository($"isPrivate");
+            var result = DoGraphQl(query, returnNullWhenNotFound: true);
+            return result != null;
+        }
+
+        public int GetBranchCount()
+        {
+            var query = GraphqlQueryForRepository("refs(refPrefix: \"refs/heads/\", first: 0) { totalCount }");
+            var result = DoGraphQl(query);
+            var count = result.Value("repository/refs/totalCount");
+            return int.Parse(count);
+        }
+
+        public string GetProperlyCasedRepositoryName()
+        {
+            var query = GraphqlQueryForRepository($"owner {{login}} name");
+            var result = DoGraphQl(query, returnNullWhenNotFound: true);
+            if(result == null) return null;
+            var owner = result.Value("repository/owner/login");
+            var repoName = result.Value("repository/name");
+            return $"{owner}/{repoName}";
+        }
+
+        public void CreateFileInRemoteRepository(string path, string branch, string commitMessage, byte[] contents)
+        {
+            var input = $@"
+{{
+  ""branch"": {branch.AsJson()},
+  ""message"": {commitMessage.AsJson()},
+  ""content"": {Convert.ToBase64String(contents).AsJson()}
+}}";
+            Put($"repos/{FullRepositoryName}/contents/{path}", input);
+            
+        }
+
+        private string GraphqlQueryForRepository(string queryBody)
+        {
+            return $"query {{ repository(owner: {repositoryOwner.AsJson()}, name: {repositoryName.AsJson()}) {{ {queryBody} }} }}";
+        }
+
+        private T Get<T>(string path) where T:class
+        {
+            return DoRestApi(() => httpClient.ExecuteRequest<T>(HttpMethod.Get, path));
         }
 
         private string Post(string path, string content = null)
         {
-            return DoApi(() => httpClient.ExecuteRequest(HttpMethod.Post, path, content));
+            return DoRestApi(() => httpClient.ExecuteRequest<string>(HttpMethod.Post, path, content));
+        }
+
+        private string Put(string path, string content = null)
+        {
+            return DoRestApi(() => httpClient.ExecuteRequest<string>(HttpMethod.Put, path, content));
+        }
+
+        private static readonly HttpMethod httpPatch = new HttpMethod("PATCH");
+        private string Patch(string path, string content = null)
+        {
+            return DoRestApi(() => httpClient.ExecuteRequest<string>(httpPatch, path, content));
         }
 
         private string Delete(string path)
         {
-            return DoApi(() => httpClient.ExecuteRequest(HttpMethod.Delete, path));
+            return DoRestApi(() => httpClient.ExecuteRequest<string>(HttpMethod.Delete, path));
         }
 
-        private string DoApi(Func<HttpResponse> apiAction, bool returnNullWhenNotFound = false)
+        private T DoRestApi<T>(Func<HttpResponse<T>> apiAction) where T:class
         {
             var response = apiAction();
             if (response.IsSuccess)
                 return response.Content;
-            else if (response.StatusCode == 404 && returnNullWhenNotFound)
-                return null;
             else
                 throw ApiException.FromResponse(response);
+        }
+
+        private JsonObject DoGraphQl(string query, bool returnNullWhenNotFound = false)
+        {
+            var body = $@"{{ ""query"": {query.AsJson()} }}".Replace("\r\n", "");
+            var response = httpClient.ExecuteRequest<string>(HttpMethod.Post, "https://api.github.com/graphql", body);
+            if (response.IsError)
+                throw ApiException.FromResponse(response);
+
+            var responseJson = response.Content.AsJsonObject();
+            if (responseJson.HasKey("errors"))
+            {
+                if (returnNullWhenNotFound && responseJson.Value<JsonObject[]>("errors").Any(e => e.Value("type", true) == "NOT_FOUND"))
+                    return null;
+                else
+                    throw ApiException.FromGraphqlResponse(response);
+            }
+
+            return responseJson.Value<JsonObject>("data");
         }
     }
 }
