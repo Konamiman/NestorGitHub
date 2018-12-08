@@ -1,15 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        void DestroyRepository(string[] args)
+        #pragma warning disable 414
+
+        static readonly string destroyCommandLine = "ngh destroy [<owner>/]<repository name>";
+
+        static readonly string destroyCommandExplanation =
+@"Destroys a repository in your GitHub account.
+Be careful, this can't be undone!";
+
+        void DestroyCommand(string[] args)
         {
+            #pragma warning restore 414
+
             if (args.Length == 0)
                 throw BadParameter("Repository name is required");
 

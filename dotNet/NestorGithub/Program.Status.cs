@@ -5,8 +5,17 @@ namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        void Status(string[] args)
+        #pragma warning disable 414
+
+        static readonly string statusCommandLine = "ngh status [<local directory>]";
+
+        static readonly string statusCommandExplanation = 
+@"Shows a list of changes (added, modified and deleted files) in the local repository.";
+
+        void StatusCommand(string[] args)
         {
+            #pragma warning restore 414
+
             var directory = new FilesystemDirectory(args.ElementAtOrDefault(0));
             var localRepository = GetExistingLocalRepository(directory);
 
@@ -40,7 +49,7 @@ namespace Konamiman.NestorGithub
             }
             PrintLine("");
 
-            var changes = localRepository.GetLocalChanges();
+            var changes = localRepository.GetLocalState();
 
             if(!changes.HasChanges)
             {

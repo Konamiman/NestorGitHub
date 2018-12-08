@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
-    class LocalRepositoryChanges
+    class RepositoryState
     {
         public bool HasChanges => AddedFiles.Any() || ModifiedFiles.Any() || DeletedFiles.Any();
 
@@ -15,5 +11,6 @@ namespace Konamiman.NestorGithub
         public string[] AddedFiles { get; set; }
         public string[] ModifiedFiles { get; set; }
         public string[] DeletedFiles { get; set; }
+        public string[] UnchangedFiles { get; set; }
     }
 }

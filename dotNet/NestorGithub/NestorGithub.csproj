@@ -59,9 +59,9 @@
     <Compile Include="JsonObject.cs" />
     <Compile Include="ListRepositoriesResponse.cs" />
     <Compile Include="LocalRepository.cs" />
-    <Compile Include="LocalRepositoryChanges.cs" />
-    <Compile Include="Printer.cs" />
-    <Compile Include="Program.CloneRepository.cs">
+    <Compile Include="RepositoryState.cs" />
+    <Compile Include="UI.cs" />
+    <Compile Include="Program.CloneLink.cs">
       <DependentUpon>Program.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.Commit.cs">
@@ -74,17 +74,21 @@
     <Compile Include="Program.DestroyRepository.cs">
       <DependentUpon>Program.cs</DependentUpon>
     </Compile>
+    <Compile Include="Program.Help.cs">
+      <DependentUpon>Program.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Program.Pull.cs">
+      <DependentUpon>Program.cs</DependentUpon>
+    </Compile>
     <Compile Include="Program.Status.cs">
       <DependentUpon>Program.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.UnlinkRepository.cs">
       <DependentUpon>Program.cs</DependentUpon>
     </Compile>
-    <Compile Include="Program._Explanation.cs">
-      <DependentUpon>Program.cs</DependentUpon>
-    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="JsonExtensions.cs" />
+    <Compile Include="PullConflictStrategy.cs" />
     <Compile Include="RepositoryFileReference.cs" />
     <Compile Include="RepositoryInfo.cs" />
   </ItemGroup>

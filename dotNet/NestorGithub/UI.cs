@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Konamiman.NestorGithub
 {
-    static class Printer
+    static class UI
     {
         public static void Print(string value)
         {
@@ -16,6 +16,15 @@ namespace Konamiman.NestorGithub
         public static void PrintLine(string value)
         {
             Console.WriteLine(value);
+        }
+
+        public static ConsoleKey ReadKey(params ConsoleKey[] allowedValues)
+        {
+            while (true)
+            {
+                var keyInfo = Console.ReadKey();
+                if(allowedValues.Contains(keyInfo.Key)) return keyInfo.Key;
+            }
         }
     }
 }

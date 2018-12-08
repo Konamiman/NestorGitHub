@@ -1,15 +1,20 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        void Commit(string[] args)
+        #pragma warning disable 414
+
+        static readonly string commitCommandLine = "ngh commit [-d <local directory>] <message>";
+
+        static readonly string commitCommandExplanation = "Commits and pushes local changes.";
+
+        void CommitCommand(string[] args)
         {
+            #pragma warning restore 414
+
             string directoryPath = null;
             if(args.FirstOrDefault().Equals("-d", StringComparison.InvariantCultureIgnoreCase))
             {

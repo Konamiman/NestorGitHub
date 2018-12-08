@@ -4,7 +4,29 @@ namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        void CloneRepository(string[] args, bool linkOnly)
+        #pragma warning disable 414
+
+        static readonly string cloneCommandLine = "ngh clone [<owner>/]<repository name> [<local directory>]";
+
+        static readonly string cloneCommandExplanation =
+@"Creates and links a local repository from the contents of a remote repository.
+Default owner is the configured GitHub user name.
+Default local directory is the current directory. If it exists it must be empty,
+if not it will be created.";
+  
+        void CloneCommand(string[] args) => Clone(args, false);
+
+        static readonly string linkCommandLine = "ngh link [<owner>/]<repository name> [<local directory>]";
+
+        static readonly string linkCommandExplanation =
+@"Same as clone, but the local directory doesn't need to be empty
+and no files are downloaded.";
+
+        void LinkCommand(string[] args) => Clone(args, true);
+
+        #pragma warning restore  414
+
+        void Clone(string[] args, bool linkOnly)
         {
             if (args.Length == 0)
                 throw BadParameter("Repository name is required");

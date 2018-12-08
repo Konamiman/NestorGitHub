@@ -83,8 +83,7 @@ namespace Konamiman.NestorGithub
 
                 BranchName = Api.GetRepositoryInfo().DefaultBranch;
                 CommitSha = Api.GetBranchCommitSha(BranchName);
-                var treeSha = Api.GetCommitTreeSha(CommitSha);
-                treeFiles = Api.GetTreeFileReferences(treeSha);
+                treeFiles = GetRemoteFileReferences();
 
                 UpdateStateFile();
                 UpdateTreeFile(treeFiles);
@@ -165,9 +164,9 @@ namespace Konamiman.NestorGithub
         public void Commit(string authorName, string authorEmail, string commitMessage)
         {
             PrintLine("Checking local changes...");
-            var localChanges = GetLocalChanges();
+            var localState = GetLocalState();
 
-            if (!localChanges.HasChanges)
+            if (!localState.HasChanges)
                 throw new InvalidOperationException("No local changes, nothing to commit");
 
             PrintLine("Checking state of remote repository...");
@@ -178,7 +177,7 @@ namespace Konamiman.NestorGithub
             if (!BranchExistsRemotely())
             {
                 if(Api.GetBranchCount() > 0)
-                    throw new InvalidOperationException($"Branch {BranchName} doesn't exist remotely!"); //TODO
+                    throw new InvalidOperationException($"Branch {BranchName} doesn't exist remotely!");
 
                 PrintLine("Creating initial empty commit...");
                 CommitSha = CreateInitialEmptyCommit(authorName, authorEmail);
@@ -186,27 +185,27 @@ namespace Konamiman.NestorGithub
             else if (!IsUpToDateWithRemote())
                 throw new InvalidOperationException($"Your local repository isn't up to date with the remote repository, you need to pull before you can commit");
 
-            var allChangedFiles = localChanges.AddedFiles.Union(localChanges.ModifiedFiles).ToArray();
+            var addedAndModifiedFiles = localState.AddedFiles.Union(localState.ModifiedFiles).ToArray();
 
-            var localChangesFileReferences = new List<RepositoryFileReference>();
-            if (allChangedFiles.Length > 0)
+            var addedAndModifiedFileReferences = new List<RepositoryFileReference>();
+            if (addedAndModifiedFiles.Length > 0)
             {
                 PrintLine("Pushing new and changed files...");
-                foreach (var filePath in allChangedFiles)
+                foreach (var filePath in addedAndModifiedFiles)
                 {
                     PrintLine($"  {filePath}...");
                     var fileContents = directory.GetFileContents(filePath);
                     var fileSha = Api.CreateBlob(fileContents);
-                    localChangesFileReferences.Add(new RepositoryFileReference { Path = filePath, Size = fileContents.Length, BlobSha = fileSha });
+                    addedAndModifiedFileReferences.Add(new RepositoryFileReference { Path = filePath, Size = fileContents.Length, BlobSha = fileSha });
                 }
             }
 
             var currentCommitFileReferences = ParseTreeFile();
-            var localChangesFilenames = localChanges.AllChangedFiles;
-            var unchangedFileReferences = currentCommitFileReferences.Where(r => !localChangesFilenames.Contains(r.Path)).ToArray();
+            var allChangedFiles = localState.AllChangedFiles;
+            var unchangedFileReferences = currentCommitFileReferences.Where(r => !allChangedFiles.Contains(r.Path)).ToArray();
 
             PrintLine("Creating remote tree...");
-            var treeSha = Api.CreateTree(unchangedFileReferences.Union(localChangesFileReferences).ToArray());
+            var treeSha = Api.CreateTree(unchangedFileReferences.Union(addedAndModifiedFileReferences).ToArray());
 
             PrintLine("Creating commit...");
             var newCommitSha = Api.CreateCommit(commitMessage, treeSha, CommitSha, authorName, authorEmail);
@@ -217,10 +216,189 @@ namespace Konamiman.NestorGithub
             PrintLine("Updating local state...");
 
             CommitSha = newCommitSha;
-            var currentLocalFileReferences = unchangedFileReferences.Union(localChangesFileReferences).ToArray();
+            var currentLocalFileReferences = unchangedFileReferences.Union(addedAndModifiedFileReferences).ToArray();
             UpdateTreeFile(currentLocalFileReferences);
             UpdateStateFile();
             DoForAllLocalFiles(file => { directory.SetUnmodified(file); });
+        }
+
+        public void Pull(PullConflictStrategy conflictStrategy)
+        {
+            UI.PrintLine("Checking remote status...");
+
+            if (!ExistsRemotely())
+                throw new InvalidOperationException("The remote repository doesn't exist!");
+
+            if (!BranchExistsRemotely())
+                throw new InvalidOperationException($"Branch '{BranchName}' doesn't exist remotely!");
+
+            var remoteCommitSha = Api.GetBranchCommitSha(BranchName);
+            if (remoteCommitSha == CommitSha)
+                throw new InvalidOperationException("Your local repository is up to date with remote, nothing to pull");
+
+            UI.PrintLine("Calculating changes...");
+
+            var newRemoteFileReferences = GetRemoteFileReferences(remoteCommitSha);
+            var oldRemoteFileReferences = ParseTreeFile();
+            var remoteState = CalculateRemoteState(oldRemoteFileReferences, newRemoteFileReferences);
+            var localState = GetLocalState();
+
+            var filenamesToDownload = remoteState.AddedFiles.Union(remoteState.ModifiedFiles).ToList();
+            var filenamesToDeleteLocally = remoteState.DeletedFiles.ToList();
+
+            //* Conflict type #1: file was modified both remotely and locally
+
+            var filenamesModifiedRemotelyAndLocally = remoteState.ModifiedFiles.Intersect(localState.ModifiedFiles);
+ 
+            foreach (var filename in filenamesModifiedRemotelyAndLocally)
+            {
+                UI.Print($"\r\n{filename} was modified both locally and remotely");
+                if (conflictStrategy == PullConflictStrategy.Ask)
+                {
+                    UI.Print($".\r\nDo you want to keep the [L]ocal version or to overwrite it with the [R]emote version? ");
+                    ConsoleKey key = UI.ReadKey(ConsoleKey.L, ConsoleKey.R);
+                    UI.PrintLine("");
+                    if (key == ConsoleKey.L)
+                        filenamesToDownload.Remove(filename);
+                }
+                else if (conflictStrategy == PullConflictStrategy.KeepLocal)
+                {
+                    UI.PrintLine(", the local copy will be kept.");
+                    filenamesToDownload.Remove(filename);
+                }
+                else
+                {
+                    UI.PrintLine(", the remote copy will be downloaded.");
+                }
+            }
+
+            //* Conflict type #2: file was modified remotely but deleted locally
+
+            var filenamesModifiedRemotelyButDeletedLocally = remoteState.ModifiedFiles.Intersect(localState.DeletedFiles);
+
+            foreach (var filename in filenamesModifiedRemotelyButDeletedLocally)
+            {
+                UI.Print($"\r\n{filename} was modified remotely but deleted locally");
+                if (conflictStrategy == PullConflictStrategy.Ask)
+                {
+                    UI.Print($".\r\nDo you want to keep the file [D]eleted or to download the [R]emote version? ");
+                    ConsoleKey key = UI.ReadKey(ConsoleKey.D, ConsoleKey.R);
+                    UI.PrintLine("");
+                    if (key == ConsoleKey.D)
+                        filenamesToDownload.Remove(filename);
+                }
+                else if (conflictStrategy == PullConflictStrategy.KeepLocal)
+                {
+                    UI.PrintLine(", the file will remain deleted.");
+                    filenamesToDownload.Remove(filename);
+                }
+                else
+                {
+                    UI.PrintLine(", the remote copy will be downloaded.");
+                }
+            }
+
+            //* Conflict type #3: file was deleted remotely but modified locally
+
+            var filenamesDeletedRemotelyButModifiedLocally = remoteState.DeletedFiles.Intersect(localState.ModifiedFiles);
+
+            foreach (var filename in filenamesDeletedRemotelyButModifiedLocally)
+            {
+                UI.Print($"\r\n{filename} was deleted remotely but modified locally");
+                if (conflictStrategy == PullConflictStrategy.Ask)
+                {
+                    UI.Print($".\r\nDo you want to [D]elete the local file or [K]eep it? ");
+                    ConsoleKey key = UI.ReadKey(ConsoleKey.D, ConsoleKey.K);
+                    UI.PrintLine("");
+                    if (key == ConsoleKey.K)
+                        filenamesToDeleteLocally.Remove(filename);
+                }
+                else if (conflictStrategy == PullConflictStrategy.KeepLocal)
+                {
+                    filenamesToDeleteLocally.Remove(filename);
+                    UI.PrintLine(", the local copy will be kept.");
+                }
+                else
+                {
+                    UI.PrintLine(", the local copy will be deleted.");
+                }
+            }
+
+            //* Conflict type #4: file was added remotely and locally
+
+            var filenamesAddedRemotelyAndLocally = remoteState.AddedFiles.Intersect(localState.AddedFiles);
+
+            foreach (var filename in filenamesAddedRemotelyAndLocally)
+            {
+                UI.Print($"\r\n{filename} was added both locally and remotely");
+                if (conflictStrategy == PullConflictStrategy.Ask)
+                {
+                    UI.Print($".\r\nDo you want to keep the [L]ocal file or to download the [R]emote version? ");
+                    ConsoleKey key = UI.ReadKey(ConsoleKey.L, ConsoleKey.R);
+                    UI.PrintLine("");
+                    if (key == ConsoleKey.L)
+                        filenamesToDownload.Remove(filename);
+                }
+                else if (conflictStrategy == PullConflictStrategy.KeepLocal)
+                {
+                    filenamesToDownload.Remove(filename);
+                    UI.PrintLine(", the local copy will be kept.");
+                }
+                else
+                {
+                    UI.PrintLine(", the remote copy will be downloaded.");
+                }
+            }
+
+            UI.PrintLine("");
+
+            var newRemoteFileReferencesByName = newRemoteFileReferences.ToDictionary(r => r.Path);
+            foreach (var filename in filenamesToDownload)
+            {
+                UI.PrintLine($"Downloading {filename} ...");
+                var fileContents = Api.GetBlob(newRemoteFileReferencesByName[filename].BlobSha);
+                directory.CreateFile(fileContents, filename);
+                directory.SetUnmodified(filename);
+            }
+
+            foreach(var filename in filenamesToDeleteLocally)
+            {
+                UI.PrintLine($"Deleting {filename} ...");
+                directory.DeleteFile(filename);
+            }
+
+            CommitSha = remoteCommitSha;
+            UpdateStateFile();
+            UpdateTreeFile(newRemoteFileReferences);
+
+            UI.PrintLine("");
+        }
+
+        private RepositoryState CalculateRemoteState(RepositoryFileReference[] oldReferences, RepositoryFileReference[] newReferences)
+        {
+            var oldReferencesByName = oldReferences.ToDictionary(r => r.Path);
+            var newReferencesByName = newReferences.ToDictionary(r => r.Path);
+            var newFilenames = newReferencesByName.Keys;
+            var oldFilenames = oldReferencesByName.Keys;
+
+            var addedFilenames = newFilenames.Except(oldFilenames);
+            var deletedFilenames = oldFilenames.Except(newFilenames);
+            var commonFilenames = newFilenames.Except(addedFilenames);
+            var modifiedFilenames = commonFilenames.Where(f => oldReferencesByName[f].BlobSha != newReferencesByName[f].BlobSha);
+
+            return new RepositoryState
+            {
+                AddedFiles = addedFilenames.ToArray(),
+                ModifiedFiles = modifiedFilenames.ToArray(),
+                DeletedFiles = deletedFilenames.ToArray(),
+                UnchangedFiles = commonFilenames.Except(modifiedFilenames).ToArray()
+            };
+        }
+
+        private RepositoryFileReference[] GetRemoteFileReferences(string commitSha = null)
+        {
+            var remoteTreeSha = Api.GetCommitTreeSha(commitSha ?? this.CommitSha);
+            return Api.GetTreeFileReferences(remoteTreeSha);
         }
 
         private string CreateInitialEmptyCommit(string authorName, string authorEmail)
@@ -249,7 +427,7 @@ namespace Konamiman.NestorGithub
             return remoteCommitSha == CommitSha;
         }
 
-        public RepositoryFileReference[] ParseTreeFile()
+        private RepositoryFileReference[] ParseTreeFile()
         {
             return directory
                 .ReadTextFile(treeFilePath)
@@ -288,12 +466,12 @@ namespace Konamiman.NestorGithub
             this.CommitSha = stateFileParts[2];
         }
 
-        public static void PrintLine(string value)
+        private static void PrintLine(string value)
         {
-            Printer.PrintLine(value);
+            UI.PrintLine(value);
         }
 
-        public LocalRepositoryChanges GetLocalChanges()
+        public RepositoryState GetLocalState()
         {
             var remoteFiles = directory.FileExists(treeFilePath)
                 ? ParseTreeFile().Select(f => f.Path)
@@ -314,11 +492,12 @@ namespace Konamiman.NestorGithub
 
             var deletedFiles = remoteFiles.Except(allLocalFiles);
 
-            return new LocalRepositoryChanges()
+            return new RepositoryState()
             {
                 AddedFiles = addedFiles.ToArray(),
                 ModifiedFiles = modifiedFiles.ToArray(),
-                DeletedFiles = deletedFiles.ToArray()
+                DeletedFiles = deletedFiles.ToArray(),
+                UnchangedFiles = allLocalFiles.Except(addedFiles).Except(modifiedFiles).Except(deletedFiles).ToArray()
             };
         }
 

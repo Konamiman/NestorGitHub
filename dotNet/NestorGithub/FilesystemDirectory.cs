@@ -117,5 +117,10 @@ namespace Konamiman.NestorGithub
 
             return true;
         }
+
+        public void DeleteFile(string filename)
+        {
+            File.Delete(Combine(filename));
+        }
     }
 }

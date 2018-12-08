@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
 
 namespace Konamiman.NestorGithub
 {
@@ -13,27 +15,15 @@ namespace Konamiman.NestorGithub
             if(Debugger.IsAttached)
                 //args = new[] { "commit", "-d", @"c:\temp\nex", "First commit from NestorGithub!!"};
                 //args = new[] { "clone", "sandbox", @"c:\temp\nex" };
-                args = new[] { "status", @"c:\temp\nex" };
+                args = new[] { "pull", "-d", @"c:\temp\TestingNgh" };
 
             var result = new Program().Run(args);
             if (Debugger.IsAttached) Console.ReadKey();
             return result;
         }
 
-        readonly Dictionary<string, Action<string[]>> actions;
-                
         public Program()
         {
-            actions = new Dictionary<string, Action<string[]>>
-            {
-                { "new", CreateRepository },
-                { "destroy", DestroyRepository },
-                { "clone", args => CloneRepository(args, false) },
-                { "link", args => CloneRepository(args, true) },
-                { "unlink", UnlinkRepository },
-                { "status", Status },
-                { "commit", Commit }
-            };
         }
 
         string user, password;
@@ -44,7 +34,13 @@ namespace Konamiman.NestorGithub
 
             Print("NestorGithub 1.0 - (c) Konamiman 2018\r\n\r\n");
 
-            if(args.Length > 0 && args[0].Equals("-a", StringComparison.InvariantCultureIgnoreCase))
+            if (args.Length == 0)
+            {
+                Print($"Usage:\r\n\r\n{GetCommandLines().JoinInLines()}\r\n\r\n");
+                return 0;
+            }
+
+            if (args[0].Equals("-a", StringComparison.InvariantCultureIgnoreCase))
             {
                 user = "";
                 password = "";
@@ -56,15 +52,9 @@ namespace Konamiman.NestorGithub
                 password = Configuration.GithubPasswordOrToken;
             }
 
-             if (args.Length == 0 || !actions.Keys.Contains(args[0], StringComparer.CurrentCultureIgnoreCase))
-            {
-                Print(explanation);
-                return 0;
-            }
-
             try
             {
-                actions[args[0]](args.Skip(1).ToArray());
+                RunCommand(args[0], args.Skip(1).ToArray());
                 return 0;
             }
             catch (ApiException ex)
@@ -82,6 +72,31 @@ namespace Konamiman.NestorGithub
                 Print($"*** {ex.GetType().Name}: {ex.Message}\r\n{ex.StackTrace}");
                 return 1;
             }
+        }
+
+        void RunCommand(string name, string[] args)
+        {
+            var method = this.GetType().GetMethod($"{name}Command", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (method == null)
+                throw BadParameter($"Unknown command '{name}'");
+
+            try
+            {
+                method.Invoke(this, new object[] { args });
+            }
+            catch (TargetInvocationException ex)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            }
+        }
+
+        string[] GetCommandLines()
+        {
+            return this.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Static)
+                .Where(f => f.Name.EndsWith("CommandLine"))
+                .Select(f => (string)f.GetValue(null))
+                .OrderBy(x => x)
+                .ToArray();
         }
 
         LocalRepository GetExistingLocalRepository(FilesystemDirectory localDirectory)
@@ -113,12 +128,12 @@ namespace Konamiman.NestorGithub
 
         void Print(string text)
         {
-            Printer.Print(text);
+            UI.Print(text);
         }
 
         void PrintLine(string text)
         {
-            Printer.PrintLine(text);
+            UI.PrintLine(text);
         }
     }
 }

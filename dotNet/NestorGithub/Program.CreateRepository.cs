@@ -5,8 +5,18 @@ namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        void CreateRepository(string[] args)
+        #pragma warning disable 414
+
+        static readonly string newCommandLine = "ngh new [-p] <repository name> [<repository description>]";
+
+        static readonly string newCommandExplanation =
+@"Creates a new repository in your GitHub account.
+-p creates a private repository, you need a paid GitHub acount for that.";
+
+        void NewCommand(string[] args)
         {
+            #pragma warning restore 414
+
             if (args.Length == 0 || (args.Length == 1 && args[0].StartsWith("-")))
                 throw BadParameter("Repository name is required");
 
