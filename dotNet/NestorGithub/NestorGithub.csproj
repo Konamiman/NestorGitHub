@@ -59,6 +59,12 @@
     <Compile Include="JsonObject.cs" />
     <Compile Include="ListRepositoriesResponse.cs" />
     <Compile Include="LocalRepository.cs" />
+    <Compile Include="Program.Branch.cs">
+      <DependentUpon>Program.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Program.Merge.cs">
+      <DependentUpon>Program.cs</DependentUpon>
+    </Compile>
     <Compile Include="RepositoryState.cs" />
     <Compile Include="UI.cs" />
     <Compile Include="Program.CloneLink.cs">
@@ -95,12 +101,14 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
-    <None Include="secrets.config.example">
+    <None Include="ngh.secrets.config.example">
       <Generator>SettingsSingleFileGenerator</Generator>
     </None>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>if exist $(ProjectDir)secrets.config copy $(ProjectDir)secrets.config $(TargetDir)</PostBuildEvent>
+    <PostBuildEvent>if exist $(ProjectDir)ngh.secrets.config copy $(ProjectDir)ngh.secrets.config $(TargetDir)
+copy $(TargetDir) c:\bin
+</PostBuildEvent>
   </PropertyGroup>
 </Project>

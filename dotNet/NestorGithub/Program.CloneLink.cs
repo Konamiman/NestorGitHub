@@ -6,17 +6,15 @@ namespace Konamiman.NestorGithub
     {
         #pragma warning disable 414
 
-        static readonly string cloneCommandLine = "ngh clone [<owner>/]<repository name> [<local directory>]";
+        static readonly string cloneCommandLine = "ngh clone [<owner>/]<repository name>";
 
         static readonly string cloneCommandExplanation =
-@"Creates and links a local repository from the contents of a remote repository.
-Default owner is the configured GitHub user name.
-Default local directory is the current directory. If it exists it must be empty,
-if not it will be created.";
+@"Creates and links a local repository from the contents of a remote repository in the current local directory.
+Default owner is the configured GitHub user name.";
   
         void CloneCommand(string[] args) => Clone(args, false);
 
-        static readonly string linkCommandLine = "ngh link [<owner>/]<repository name> [<local directory>]";
+        static readonly string linkCommandLine = "ngh link [<owner>/]<repository name>";
 
         static readonly string linkCommandExplanation =
 @"Same as clone, but the local directory doesn't need to be empty
@@ -32,24 +30,23 @@ and no files are downloaded.";
                 throw BadParameter("Repository name is required");
 
             var suppliedRepositoryName = FullRepositoryName(args[0]);
-            var directory = new FilesystemDirectory(args.ElementAtOrDefault(1));
             var api = GetApi(suppliedRepositoryName);
 
             var repositoryName = api.GetProperlyCasedRepositoryName();
             if(repositoryName == null)
                 throw BadParameter($"There's no repository named {suppliedRepositoryName} in GitHub (visible to you, at least)");
 
-            var localRepository = new LocalRepository(directory, api, allowNonLinkedDirectory: true);
+            var localRepository = new LocalRepository(null, api, allowNonLinkedDirectory: true);
 
             if (linkOnly)
             {
                 localRepository.Link(repositoryName);
-                Print($"{directory.PhysicalPath} has been linked to {repositoryName} on branch {localRepository.BranchName}");
+                UI.Print($"{localRepository.LocalPath} has been linked to {repositoryName} on branch {localRepository.LocalBranchName}");
             }
             else
             {
                 localRepository.Clone(repositoryName);
-                Print($"\r\nRepository {repositoryName} has been cloned at {directory.PhysicalPath}");
+                UI.Print($"\r\nRepository {repositoryName} has been cloned at {localRepository.LocalPath}");
             }
         }
     }

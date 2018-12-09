@@ -21,7 +21,7 @@ Be careful, this can't be undone!";
 
             var repositoryName = FullRepositoryName(args[0]);
 
-            Print(
+            UI.Print(
 $@"WARNING! WARNING! WARNING!
 
 This action cannot be undone.
@@ -32,14 +32,14 @@ Please type in the full name of the repository to confirm (or press Enter to can
             var typedRespositoryName = Console.ReadLine();
             if (!typedRespositoryName.Equals(repositoryName, StringComparison.InvariantCultureIgnoreCase))
             {
-                Print("Operation cancelled\r\n");
+                UI.Print("Operation cancelled\r\n");
                 return;
             }
 
             var api = GetApi(repositoryName);
             api.DeleteRepository();
 
-            Print($"Repository {repositoryName} successfully deleted");
+            UI.Print($"Repository {repositoryName} successfully deleted");
         }
     }
 }

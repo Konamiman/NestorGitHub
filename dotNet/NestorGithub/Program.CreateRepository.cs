@@ -42,7 +42,7 @@ namespace Konamiman.NestorGithub
             var api = GetApi(FullRepositoryName(repositoryName));
             var result = api.CreateRepository(respositoryDescription, isPrivate);
 
-            Print($"Repository {result.RespositoryFullName} created successfully");
+            UI.Print($"Repository {result.RespositoryFullName} created successfully");
         }
     }
 }

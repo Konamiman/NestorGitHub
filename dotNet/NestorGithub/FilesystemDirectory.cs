@@ -1,29 +1,26 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
     class FilesystemDirectory
     {
-        const string databaseDirectory = ".ngh";
-        private readonly string rootPath;
+        private string rootPath;
 
         public FilesystemDirectory(string path = null)
         {
-            this.rootPath = (path ?? Directory.GetCurrentDirectory()).Replace(Path.DirectorySeparatorChar, '/');
+            this.rootPath = PathWithProperCasingAndSeparators(path ?? Directory.GetCurrentDirectory());
+            if(this.rootPath == null)
+                throw new InvalidOperationException($"Directory {path} does not exist");
         }
 
         public string PhysicalPath => rootPath;
 
         public bool HasContents => Directory.GetFileSystemEntries(rootPath).Length > 0;
 
-        public bool Exists => Directory.Exists(rootPath);
-
-        public void CreateIfNotExists()
-        {
-            if (!Exists) Directory.CreateDirectory(rootPath);
-        }
+        public static bool AbsoluteDirectoryExists(string path) => Directory.Exists(path);
 
         public bool DirectoryExists(params string[] pathSegments) => Directory.Exists(Combine(pathSegments));
 
@@ -121,6 +118,42 @@ namespace Konamiman.NestorGithub
         public void DeleteFile(string filename)
         {
             File.Delete(Combine(filename));
+        }
+
+        public bool MoveOneDirectoryUp()
+        {
+            var slashIndex = rootPath.LastIndexOf("/");
+            if (slashIndex == -1) return false;
+            rootPath = rootPath.Substring(0, slashIndex);
+            return true;
+        }
+
+        //https://stackoverflow.com/a/28919652/4574
+        public string PathWithProperCasingAndSeparators(string filePath)
+        {
+            string fullFilePath = Path.GetFullPath(filePath).Replace('/', Path.DirectorySeparatorChar);
+
+            string fixedPath = "";
+            foreach (string token in fullFilePath.Split('\\'))
+            {
+                //first token should be drive token
+                if (fixedPath == "")
+                {
+                    //fix drive casing
+                    string drive = string.Concat(token, "\\");
+                    drive = DriveInfo.GetDrives()
+                        .First(driveInfo => driveInfo.Name.Equals(drive, StringComparison.OrdinalIgnoreCase)).Name;
+
+                    fixedPath = drive;
+                }
+                else
+                {
+                    fixedPath = Directory.GetFileSystemEntries(fixedPath, token).FirstOrDefault();
+                    if (fixedPath == null) return null;
+                }
+            }
+
+            return fixedPath.Replace(Path.DirectorySeparatorChar, '/');
         }
     }
 }

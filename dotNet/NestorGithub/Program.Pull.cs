@@ -7,7 +7,7 @@ namespace Konamiman.NestorGithub
     {
         #pragma warning disable 414
 
-        static readonly string pullCommandLine = "ngh pull [-d <local directory>] [-a|-l|-o]";
+        static readonly string pullCommandLine = "ngh pull [-a|-l|-o]";
 
         static readonly string pullCommandExplanation =
 @"Pull changes from the remote repository.
@@ -19,30 +19,22 @@ namespace Konamiman.NestorGithub
         {
             #pragma warning restore 414
 
-            string directoryPath = null;
-            if (args.Length > 0 && args[0].Equals("-d", StringComparison.InvariantCultureIgnoreCase))
-            {
-                directoryPath = args[1];
-                args = args.Skip(2).ToArray();
-            }
-
             PullConflictStrategy conflictStrategy = PullConflictStrategy.Ask;
             if(args.Length > 0)
             {
-                if (args[0].Equals("-l", StringComparison.InvariantCultureIgnoreCase))
+                if (IsFlagParam(args[0], "l"))
                     conflictStrategy = PullConflictStrategy.KeepLocal;
-                else if (args[0].Equals("-r", StringComparison.InvariantCultureIgnoreCase))
+                else if (IsFlagParam(args[0], "r"))
                     conflictStrategy = PullConflictStrategy.OverWriteWithRemote;
-                else if (!args[0].Equals("-a", StringComparison.InvariantCultureIgnoreCase))
+                else if (IsFlagParam(args[0], "a"))
                     throw BadParameter($"Unknown parameter '{args[0]}'");
             }
 
-            var directory = new FilesystemDirectory(directoryPath);
-            var localRepository = GetExistingLocalRepository(directory);
+            var localRepository = GetExistingLocalRepository();
 
             localRepository.Pull(conflictStrategy);
 
-            Print($"Your local repository is now up to date with {localRepository.FullRepositoryName}");
+            UI.Print($"Your local repository is now up to date with {localRepository.FullRepositoryName}");
         }
     }
 }

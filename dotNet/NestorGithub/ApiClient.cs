@@ -207,6 +207,37 @@ namespace Konamiman.NestorGithub
             
         }
 
+        public void CreateBranch(string branch, string commitSha)
+        {
+            var input = $@"
+{{
+  ""ref"": {$"refs/heads/{branch}".AsJson()},
+  ""sha"": {commitSha.AsJson()}
+}}";
+            Post($"repos/{FullRepositoryName}/git/refs", input);
+        }
+
+        internal void MergeBranches(string sourceBranch, string baseBranch, string commitMessage)
+        {
+            var json = $@"
+{{
+    ""base"": {baseBranch.AsJson()},
+    ""head"": {sourceBranch.AsJson()}
+";
+            if (commitMessage != null)
+                json += $@", ""commit_message"": {commitMessage.AsJson()}
+";
+
+            json += "}";
+
+            Post($"repos/{FullRepositoryName}/merges", json);
+        }
+
+        internal void DeleteBranch(string branchName)
+        {
+            Delete($"repos/{FullRepositoryName}/git/refs/heads/{branchName}");
+        }
+
         private string GraphqlQueryForRepository(string queryBody)
         {
             return $"query {{ repository(owner: {repositoryOwner.AsJson()}, name: {repositoryName.AsJson()}) {{ {queryBody} }} }}";

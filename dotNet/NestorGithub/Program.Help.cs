@@ -28,7 +28,7 @@ namespace Konamiman.NestorGithub
             var explanation = this.GetType().GetField($"{commandName}CommandExplanation", BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.IgnoreCase)
                 .GetValue(null);
 
-            Print($"{commandLine}\r\n\r\n{explanation}\r\n\r\n");
+            UI.Print($"{commandLine}\r\n\r\n{explanation}\r\n\r\n");
         }
     }
 }

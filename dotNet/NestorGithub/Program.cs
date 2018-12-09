@@ -15,7 +15,9 @@ namespace Konamiman.NestorGithub
             if(Debugger.IsAttached)
                 //args = new[] { "commit", "-d", @"c:\temp\nex", "First commit from NestorGithub!!"};
                 //args = new[] { "clone", "sandbox", @"c:\temp\nex" };
-                args = new[] { "pull", "-d", @"c:\temp\TestingNgh" };
+                //args = new[] { "pull", "-d", @"c:\temp\TestingNgh" };
+                //args = new[] { "branch", "-d", "branchie2" };
+                args = new[] { "status" };
 
             var result = new Program().Run(args);
             if (Debugger.IsAttached) Console.ReadKey();
@@ -32,11 +34,11 @@ namespace Konamiman.NestorGithub
         {
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
-            Print("NestorGithub 1.0 - (c) Konamiman 2018\r\n\r\n");
+            UI.Print("NestorGithub 1.0 - (c) Konamiman 2018\r\n\r\n");
 
             if (args.Length == 0)
             {
-                Print($"Usage:\r\n\r\n{GetCommandLines().JoinInLines()}\r\n\r\n");
+                UI.Print($"Usage:\r\n\r\n{GetCommandLines().JoinInLines()}\r\n\r\n");
                 return 0;
             }
 
@@ -59,17 +61,17 @@ namespace Konamiman.NestorGithub
             }
             catch (ApiException ex)
             {
-                Print($"*** {ex.Message}\r\n{ex.PrintableErrorsList}");
+                UI.Print($"*** {ex.Message}\r\n{ex.PrintableErrorsList}");
                 return 1;
             }
             catch (InvalidOperationException ex)
             {
-                Print($"*** {ex.Message}\r\n");
+                UI.Print($"*** {ex.Message}\r\n");
                 return 1;
             }
             catch (Exception ex) when (!Debugger.IsAttached)
             {
-                Print($"*** {ex.GetType().Name}: {ex.Message}\r\n{ex.StackTrace}");
+                UI.Print($"*** {ex.GetType().Name}: {ex.Message}\r\n{ex.StackTrace}");
                 return 1;
             }
         }
@@ -99,11 +101,11 @@ namespace Konamiman.NestorGithub
                 .ToArray();
         }
 
-        LocalRepository GetExistingLocalRepository(FilesystemDirectory localDirectory)
+        LocalRepository GetExistingLocalRepository(string directoryPath = null)
         {
-            var repositoryName = LocalRepository.GetRepositoryNameFor(localDirectory.PhysicalPath);
+            var repositoryName = LocalRepository.GetRepositoryNameFor(directoryPath);
             var api = GetApi(repositoryName);
-            return new LocalRepository(localDirectory, GetApi(repositoryName));
+            return new LocalRepository(directoryPath, GetApi(repositoryName));
         }
 
         ApiClient GetApi(string fullRepositoryName)
@@ -126,14 +128,9 @@ namespace Konamiman.NestorGithub
 
         Exception BadParameter(string message) => new InvalidOperationException(message);
 
-        void Print(string text)
+        bool IsFlagParam(string param, string expected)
         {
-            UI.Print(text);
-        }
-
-        void PrintLine(string text)
-        {
-            UI.PrintLine(text);
+            return param.Equals($"-{expected}", StringComparison.InvariantCultureIgnoreCase);
         }
     }
 }

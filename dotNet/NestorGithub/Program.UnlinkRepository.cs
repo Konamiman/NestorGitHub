@@ -6,22 +6,21 @@ namespace Konamiman.NestorGithub
     {
         #pragma warning disable 414
 
-        static readonly string unlinkCommandLine = "ngh unlink [<local directory>]";
+        static readonly string unlinkCommandLine = "ngh unlink";
 
         static readonly string unlinkCommandExplanation =
-@"Unlinks the local directory from the remote repository.
+@"Unlinks the current directory from the remote repository.
 Deletes the application data but otherwise the directory contents are kept untouched.";
 
         void UnlinkCommand(string[] args)
         {
             #pragma warning restore 414
 
-            var directory = new FilesystemDirectory(args.ElementAtOrDefault(0));
-            var localRepository = GetExistingLocalRepository(directory);
+            var localRepository = GetExistingLocalRepository();
 
             localRepository.Unlink();
 
-            Print($"{directory.PhysicalPath} has been unlinked from remote repository {localRepository.FullRepositoryName}");
+            UI.Print($"{localRepository.LocalPath} has been unlinked from remote repository {localRepository.FullRepositoryName}");
         }
     }
 }

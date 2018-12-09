@@ -13,12 +13,12 @@ namespace Konamiman.NestorGithub
         private static readonly string stateFilePath;
         private static readonly string treeFilePath;
 
-        private readonly FilesystemDirectory directory;
+        private readonly FilesystemDirectory Directory;
 
         public ApiClient Api { get; private set; }
         public string FullRepositoryName { get; private set; }
-        public string BranchName { get; private set; }
-        public string CommitSha { get; private set; }
+        public string LocalBranchName { get; private set; }
+        public string LocalCommitSha { get; private set; }
 
         static LocalRepository()
         {
@@ -26,44 +26,67 @@ namespace Konamiman.NestorGithub
             treeFilePath = FilesystemDirectory.CombinePath(databaseDirectory, treeFileName);
         }
 
-        public LocalRepository(FilesystemDirectory directory, ApiClient api, bool allowNonLinkedDirectory = false)
+        public LocalRepository(string directoryPath, ApiClient api, bool allowNonLinkedDirectory = false)
+            :this(directoryPath, allowNonLinkedDirectory)
         {
-            this.directory = directory;
             this.Api = api;
-            this.FullRepositoryName = GetRepositoryNameFor(directory.PhysicalPath, allowNonLinkedDirectory);
 
             if (IsInitialized)
                 ParseStateFile();
         }
 
-        public bool HasContents => directory.HasContents;
-
-        public bool IsInitialized => directory.DirectoryExists(databaseDirectory);
-
-        public static string GetRepositoryNameFor(string localPath, bool allowNonLinkedDirectory = false)
+        private LocalRepository(string directoryPath, bool allowNonLinkedDirectory = false)
         {
-            var directory = new FilesystemDirectory(localPath);
-            if (directory.FileExists(stateFilePath))
-                return directory.ReadTextFile(stateFilePath).SplitInLines()[0];
-
-            if (allowNonLinkedDirectory)
-                return null;
+            var directory = new FilesystemDirectory(directoryPath);
+            directoryPath = directory.PhysicalPath;
+            var isLinked = MoveDirectoryUpUntilRepositoryRoot(directory);
+            if (isLinked)
+            {
+                this.FullRepositoryName = directory.ReadTextFile(stateFilePath).SplitInLines()[0];
+            }
+            else if (allowNonLinkedDirectory)
+            {
+                this.FullRepositoryName = null;
+                directory = new FilesystemDirectory(directoryPath);
+            }
             else
-                throw new InvalidOperationException($"{localPath} is not linked to any remote repository");
+                throw new InvalidOperationException($"{directoryPath} is not linked to any remote repository");
+
+            this.Directory = directory;
+        }
+
+        public string LocalPath => Directory.PhysicalPath;
+
+        public bool HasContents => Directory.HasContents;
+
+        public bool IsInitialized => Directory.DirectoryExists(databaseDirectory);
+
+        public static string GetRepositoryNameFor(string localPath)
+        {
+            var repo = new LocalRepository(localPath);
+            return repo.FullRepositoryName;
+        }
+
+        private static bool MoveDirectoryUpUntilRepositoryRoot(FilesystemDirectory directory)
+        {
+            while(true)
+            {
+                if (directory.FileExists(stateFilePath)) return true;
+                if (!directory.MoveOneDirectoryUp()) return false;
+            }
         }
 
         public void Clone(string fullRepositoryName)
         {
             if (IsInitialized && fullRepositoryName != this.FullRepositoryName)
             {
-                throw new InvalidOperationException($"The repository at '{directory.PhysicalPath}' is already initialized for repository {this.FullRepositoryName}");
+                throw new InvalidOperationException($"The repository at '{Directory.PhysicalPath}' is already initialized for repository {this.FullRepositoryName}");
             }
-            else if (!IsInitialized && directory.HasContents)
+            else if (!IsInitialized && Directory.HasContents)
             {
-                throw new InvalidOperationException($"The target directory '{directory.PhysicalPath}' is not empty");
+                throw new InvalidOperationException($"The target directory '{Directory.PhysicalPath}' is not empty");
             }
 
-            directory.CreateIfNotExists();
             this.FullRepositoryName = fullRepositoryName;
 
             RepositoryFileReference[] treeFiles = null;
@@ -81,18 +104,18 @@ namespace Konamiman.NestorGithub
                 if(branchCount == 0)
                     throw new InvalidOperationException($"The repository {fullRepositoryName} is empty, please use 'link' instead of 'clone'");
 
-                BranchName = Api.GetRepositoryInfo().DefaultBranch;
-                CommitSha = Api.GetBranchCommitSha(BranchName);
+                LocalBranchName = Api.GetRepositoryInfo().DefaultBranch;
+                LocalCommitSha = Api.GetBranchCommitSha(LocalBranchName);
                 treeFiles = GetRemoteFileReferences();
 
                 UpdateStateFile();
                 UpdateTreeFile(treeFiles);
             }
 
-            PrintLine($"Getting files for branch {BranchName}");
+            PrintLine($"Getting files for branch {LocalBranchName}");
             foreach (var file in treeFiles)
             {
-                if (directory.FileExists(file.Path) && directory.GetFileSize(file.Path) == file.Size)
+                if (Directory.FileExists(file.Path) && Directory.GetFileSize(file.Path) == file.Size)
                 {
                     PrintLine($"  {file.Path} - already exists, skipping");
                 }
@@ -103,17 +126,14 @@ namespace Konamiman.NestorGithub
                 }
             }
 
-            DoForAllLocalFiles(file => { directory.SetUnmodified(file); });
+            DoForAllLocalFiles(file => { Directory.SetUnmodified(file); });
         }
 
         public void Link(string fullRepositoryName)
         {
-            if (!directory.Exists)
-                throw new InvalidOperationException($"Directory {directory.PhysicalPath} does not exist");
-
             if (this.IsInitialized)
             {
-                throw new InvalidOperationException($"The repository at '{directory.PhysicalPath}' is already initialized for repository {this.FullRepositoryName}");
+                throw new InvalidOperationException($"The repository at '{Directory.PhysicalPath}' is already initialized for repository {this.FullRepositoryName}");
             }
 
             this.FullRepositoryName = fullRepositoryName;
@@ -125,40 +145,40 @@ namespace Konamiman.NestorGithub
             var branchCount = Api.GetBranchCount();
             if (branchCount == 0)
             {
-                BranchName = "master";
-                CommitSha = null;
+                LocalBranchName = "master";
+                LocalCommitSha = null;
                 UpdateStateFile();
                 UpdateTreeFile(new RepositoryFileReference[0]);
             }
             else
             {
-                BranchName = Api.GetRepositoryInfo().DefaultBranch;
-                CommitSha = Api.GetBranchCommitSha(BranchName);
-                var treeSha = Api.GetCommitTreeSha(CommitSha);
+                LocalBranchName = Api.GetRepositoryInfo().DefaultBranch;
+                LocalCommitSha = Api.GetBranchCommitSha(LocalBranchName);
+                var treeSha = Api.GetCommitTreeSha(LocalCommitSha);
                 treeFiles = Api.GetTreeFileReferences(treeSha);
 
                 UpdateStateFile();
                 UpdateTreeFile(treeFiles);
             }
 
-            DoForAllLocalFiles(file => { directory.SetModified(file); });
+            DoForAllLocalFiles(file => { Directory.SetModified(file); });
         }
 
         public void Unlink()
         {
-            if(!directory.DirectoryExists(""))
+            if(!Directory.DirectoryExists(""))
             {
-                throw new InvalidOperationException($"Directory '{directory.PhysicalPath}' does not exist");
+                throw new InvalidOperationException($"Directory '{Directory.PhysicalPath}' does not exist");
             }
 
             if (!IsInitialized)
             {
-                throw new InvalidOperationException($"The target directory '{directory.PhysicalPath}' is not linked to any remote repository");
+                throw new InvalidOperationException($"The target directory '{Directory.PhysicalPath}' is not linked to any remote repository");
             }
 
             ParseStateFile();
 
-            directory.DeleteDirectory(databaseDirectory);
+            Directory.DeleteDirectory(databaseDirectory);
         }
 
         public void Commit(string authorName, string authorEmail, string commitMessage)
@@ -176,11 +196,13 @@ namespace Konamiman.NestorGithub
 
             if (!BranchExistsRemotely())
             {
-                if(Api.GetBranchCount() > 0)
-                    throw new InvalidOperationException($"Branch {BranchName} doesn't exist remotely!");
+                if (Api.GetBranchCount() > 0)
+                {
+                    throw new InvalidOperationException($"Branch {LocalBranchName} doesn't exist remotely, you can create it with 'ngh branch -n {LocalBranchName}'");
+                }
 
                 PrintLine("Creating initial empty commit...");
-                CommitSha = CreateInitialEmptyCommit(authorName, authorEmail);
+                LocalCommitSha = CreateInitialEmptyCommit(LocalBranchName, authorName, authorEmail);
             }
             else if (!IsUpToDateWithRemote())
                 throw new InvalidOperationException($"Your local repository isn't up to date with the remote repository, you need to pull before you can commit");
@@ -194,7 +216,7 @@ namespace Konamiman.NestorGithub
                 foreach (var filePath in addedAndModifiedFiles)
                 {
                     PrintLine($"  {filePath}...");
-                    var fileContents = directory.GetFileContents(filePath);
+                    var fileContents = Directory.GetFileContents(filePath);
                     var fileSha = Api.CreateBlob(fileContents);
                     addedAndModifiedFileReferences.Add(new RepositoryFileReference { Path = filePath, Size = fileContents.Length, BlobSha = fileSha });
                 }
@@ -208,18 +230,18 @@ namespace Konamiman.NestorGithub
             var treeSha = Api.CreateTree(unchangedFileReferences.Union(addedAndModifiedFileReferences).ToArray());
 
             PrintLine("Creating commit...");
-            var newCommitSha = Api.CreateCommit(commitMessage, treeSha, CommitSha, authorName, authorEmail);
+            var newCommitSha = Api.CreateCommit(commitMessage, treeSha, LocalCommitSha, authorName, authorEmail);
 
             PrintLine("Updating branch reference...");
-            Api.SetBranchCommitSha(BranchName, newCommitSha);
+            Api.SetBranchCommitSha(LocalBranchName, newCommitSha);
 
             PrintLine("Updating local state...");
 
-            CommitSha = newCommitSha;
+            LocalCommitSha = newCommitSha;
             var currentLocalFileReferences = unchangedFileReferences.Union(addedAndModifiedFileReferences).ToArray();
             UpdateTreeFile(currentLocalFileReferences);
             UpdateStateFile();
-            DoForAllLocalFiles(file => { directory.SetUnmodified(file); });
+            DoForAllLocalFiles(file => { Directory.SetUnmodified(file); });
         }
 
         public void Pull(PullConflictStrategy conflictStrategy)
@@ -230,10 +252,10 @@ namespace Konamiman.NestorGithub
                 throw new InvalidOperationException("The remote repository doesn't exist!");
 
             if (!BranchExistsRemotely())
-                throw new InvalidOperationException($"Branch '{BranchName}' doesn't exist remotely!");
+                throw new InvalidOperationException($"Branch '{LocalBranchName}' doesn't exist remotely!");
 
-            var remoteCommitSha = Api.GetBranchCommitSha(BranchName);
-            if (remoteCommitSha == CommitSha)
+            var remoteCommitSha = Api.GetBranchCommitSha(LocalBranchName);
+            if (remoteCommitSha == LocalCommitSha)
                 throw new InvalidOperationException("Your local repository is up to date with remote, nothing to pull");
 
             UI.PrintLine("Calculating changes...");
@@ -357,21 +379,95 @@ namespace Konamiman.NestorGithub
             {
                 UI.PrintLine($"Downloading {filename} ...");
                 var fileContents = Api.GetBlob(newRemoteFileReferencesByName[filename].BlobSha);
-                directory.CreateFile(fileContents, filename);
-                directory.SetUnmodified(filename);
+                Directory.CreateFile(fileContents, filename);
+                Directory.SetUnmodified(filename);
             }
 
             foreach(var filename in filenamesToDeleteLocally)
             {
                 UI.PrintLine($"Deleting {filename} ...");
-                directory.DeleteFile(filename);
+                Directory.DeleteFile(filename);
             }
 
-            CommitSha = remoteCommitSha;
+            LocalCommitSha = remoteCommitSha;
             UpdateStateFile();
             UpdateTreeFile(newRemoteFileReferences);
 
             UI.PrintLine("");
+        }
+
+        public void CreateRemoteBranch(string branchName, string baseBranchName, string authorName, string authorEmail)
+        {
+            if(BranchExistsRemotely(branchName))
+            {
+                throw new InvalidOperationException($"Branch '{branchName}' already exists remotely, you can switch to it with 'ngh {branchName}'");
+            }
+
+            string commitSha;
+            if (baseBranchName == null)
+            {
+                if (!string.IsNullOrEmpty(LocalCommitSha))
+                    commitSha = LocalCommitSha;
+                else if (Api.GetBranchCount() > 0)
+                    throw new InvalidOperationException(
+@"The local repository doesn't point to any commit, please specify a base branch name. You can list the existing remote branches with 'ngh branches'.");
+                else
+                {
+                    PrintLine("Creating initial empty commit...");
+                    commitSha = CreateInitialEmptyCommit(branchName, authorName, authorEmail);
+                }
+            }
+            else if (!BranchExistsRemotely(baseBranchName))
+                throw new InvalidOperationException($"Branch '{baseBranchName}' doesn't exist remotely.");
+            else
+                commitSha = Api.GetBranchCommitSha(baseBranchName);
+
+            Api.CreateBranch(branchName, commitSha);
+        }
+
+        public bool DeleteRemoteBranch(string branchName)
+        {
+            if (!BranchExistsRemotely(branchName))
+            {
+                throw new InvalidOperationException($"Branch '{branchName}' doesn't exist remotely.");
+            }
+
+            if(branchName.Equals(LocalBranchName))
+            {
+                UI.Print($"'{branchName}' is your current local branch. Are you sure that you want to delete ir from the remote repository? (y/n) ");
+                var key = UI.ReadKey(ConsoleKey.Y, ConsoleKey.N);
+                if (key == ConsoleKey.N) return false;
+            }
+
+            Api.DeleteBranch(branchName);
+            return true;
+        }
+
+        public void SwitchToBranch(string branchName, PullConflictStrategy conflictStrategy)
+        {
+            if (!BranchExistsRemotely(branchName))
+            {
+                throw new InvalidOperationException($"Branch '{branchName}' doesn't exist remotely, you can create it with 'ngh -n {branchName}'");
+            }
+
+            if(branchName.Equals(LocalBranchName, StringComparison.InvariantCultureIgnoreCase))
+            {
+                throw new InvalidOperationException($"Branch '{branchName}' is already the current local branch, if you want to get the latest remote version do 'ngh pull'.");
+            }
+
+            var remoteCommitSha = Api.GetBranchCommitSha(branchName);
+            var oldLocalBranchName = LocalBranchName;
+            LocalBranchName = branchName;
+            if(remoteCommitSha == LocalCommitSha)
+            {
+                UI.PrintLine($"'{branchName}' is up to date with '{oldLocalBranchName}', nothing to pull");
+            }
+            else
+            {
+                Pull(conflictStrategy);
+            }
+
+            UpdateStateFile();
         }
 
         private RepositoryState CalculateRemoteState(RepositoryFileReference[] oldReferences, RepositoryFileReference[] newReferences)
@@ -397,17 +493,17 @@ namespace Konamiman.NestorGithub
 
         private RepositoryFileReference[] GetRemoteFileReferences(string commitSha = null)
         {
-            var remoteTreeSha = Api.GetCommitTreeSha(commitSha ?? this.CommitSha);
+            var remoteTreeSha = Api.GetCommitTreeSha(commitSha ?? this.LocalCommitSha);
             return Api.GetTreeFileReferences(remoteTreeSha);
         }
 
-        private string CreateInitialEmptyCommit(string authorName, string authorEmail)
+        private string CreateInitialEmptyCommit(string branchName, string authorName, string authorEmail)
         {
             const string EmptyTreeSha = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-            Api.CreateFileInRemoteRepository("dummy", BranchName, "dummy commit", new byte[] { 0 });
+            Api.CreateFileInRemoteRepository("dummy", branchName, "dummy commit", new byte[] { 0 });
             var commitSha = Api.CreateCommit("Initial commit", EmptyTreeSha, null, authorName, authorEmail);
-            Api.SetBranchCommitSha(BranchName, commitSha, force: true);
+            Api.SetBranchCommitSha(branchName, commitSha, force: true);
             return commitSha;
         }
 
@@ -416,20 +512,31 @@ namespace Konamiman.NestorGithub
             return Api.RepositoryExists();
         }
 
-        public bool BranchExistsRemotely()
+        public bool BranchExistsRemotely(string branchName = null)
         {
-            return Api.GetBranchCommitSha(BranchName) != null;
+            return Api.GetBranchCommitSha(branchName ?? LocalBranchName) != null;
         }
 
         public bool IsUpToDateWithRemote()
         {
-            var remoteCommitSha = Api.GetBranchCommitSha(BranchName);
-            return remoteCommitSha == CommitSha;
+            var remoteCommitSha = Api.GetBranchCommitSha(LocalBranchName);
+            return remoteCommitSha == LocalCommitSha;
+        }
+
+        internal void Merge(string sourceBranch, string baseBranch, string commitMessage)
+        {
+            if(!BranchExistsRemotely(sourceBranch))
+                throw new InvalidOperationException($"Branch '{sourceBranch}' doesn't exist remotely.");
+
+            if (!BranchExistsRemotely(baseBranch))
+                throw new InvalidOperationException($"Branch '{baseBranch}' doesn't exist remotely.");
+
+            Api.MergeBranches(sourceBranch, baseBranch, commitMessage);
         }
 
         private RepositoryFileReference[] ParseTreeFile()
         {
-            return directory
+            return Directory
                 .ReadTextFile(treeFilePath)
                 .SplitInLines()
                 .Select(line => {
@@ -441,29 +548,29 @@ namespace Konamiman.NestorGithub
 
         private void UpdateStateFile()
         {
-            directory.CreateFile($"{FullRepositoryName}\r\n{BranchName}\r\n{CommitSha}\r\n", stateFilePath);
+            Directory.CreateFile($"{FullRepositoryName}\r\n{LocalBranchName}\r\n{LocalCommitSha}\r\n", stateFilePath);
         }
 
         private void UpdateTreeFile(RepositoryFileReference[] fileReferences)
         {
             var fileLines = fileReferences.Select(fr => $"{fr.BlobSha} {fr.Size} {fr.Path}");
 
-            directory.CreateFile(fileLines.JoinInLines(), treeFilePath);
+            Directory.CreateFile(fileLines.JoinInLines(), treeFilePath);
         }
 
         private void DownloadFile(RepositoryFileReference fileReference)
         {
             var fileContents = Api.GetBlob(fileReference.BlobSha);
-            directory.CreateFile(fileContents, fileReference.Path);
+            Directory.CreateFile(fileContents, fileReference.Path);
         }
 
         private void ParseStateFile()
         {
-            var stateFileContents = directory.ReadTextFile(stateFilePath);
+            var stateFileContents = Directory.ReadTextFile(stateFilePath);
             var stateFileParts = stateFileContents.SplitInLines(removeEmptyEntries: false);
             this.FullRepositoryName = stateFileParts[0];
-            this.BranchName = stateFileParts[1];
-            this.CommitSha = stateFileParts[2];
+            this.LocalBranchName = stateFileParts[1];
+            this.LocalCommitSha = stateFileParts[2];
         }
 
         private static void PrintLine(string value)
@@ -473,7 +580,7 @@ namespace Konamiman.NestorGithub
 
         public RepositoryState GetLocalState()
         {
-            var remoteFiles = directory.FileExists(treeFilePath)
+            var remoteFiles = Directory.FileExists(treeFilePath)
                 ? ParseTreeFile().Select(f => f.Path)
                 : new string[0];
             var addedFiles = new List<string>();
@@ -486,7 +593,7 @@ namespace Konamiman.NestorGithub
 
                 if (!remoteFiles.Contains(file))
                     addedFiles.Add(file);
-                else if (directory.IsModified(file))
+                else if (Directory.IsModified(file))
                     modifiedFiles.Add(file);
             });
 
@@ -503,7 +610,7 @@ namespace Konamiman.NestorGithub
 
         private void DoForAllLocalFiles(Action<string> action)
         {
-            directory.DoForAllFiles(file =>
+            Directory.DoForAllFiles(file =>
             {
                 if (!file.StartsWith(databaseDirectoryWithSlash))
                     action(file);
