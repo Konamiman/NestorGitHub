@@ -261,4 +261,4 @@ __pycache__/
 *.pyc
 
 # Where your actual GitHub username and password/token are stored during development
-secrets.config
+ngh.secrets.config
