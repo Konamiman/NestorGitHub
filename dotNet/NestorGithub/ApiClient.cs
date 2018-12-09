@@ -185,6 +185,14 @@ namespace Konamiman.NestorGithub
             return int.Parse(count);
         }
 
+        public string[] GetBranches()
+        {
+            var query = GraphqlQueryForRepository("refs(refPrefix: \"refs/heads/\", first: 100) { nodes { name } }");
+            var result = DoGraphQl(query);
+            var nodes = result.Value<JsonObject>("repository").Value<JsonObject>("refs").Value<JsonObject[]>("nodes");
+            return nodes.Select(n => n.Value("name")).ToArray();
+        }
+
         public string GetProperlyCasedRepositoryName()
         {
             var query = GraphqlQueryForRepository($"owner {{login}} name");

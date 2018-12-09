@@ -62,6 +62,9 @@
     <Compile Include="Program.Branch.cs">
       <DependentUpon>Program.cs</DependentUpon>
     </Compile>
+    <Compile Include="Program.Branches.cs">
+      <DependentUpon>Program.cs</DependentUpon>
+    </Compile>
     <Compile Include="Program.Merge.cs">
       <DependentUpon>Program.cs</DependentUpon>
     </Compile>
