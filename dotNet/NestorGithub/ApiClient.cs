@@ -82,6 +82,7 @@ namespace Konamiman.NestorGithub
         {
             var query = GraphqlQueryForRepository($"object(oid: {commitSha.AsJson()}) {{ ...on Commit {{ tree {{ oid }} }} }}");
             var result = DoGraphQl(query);
+            if (!result.HasValue("repository/object")) return null;
             return result.Value("repository/object/tree/oid");
         }
 

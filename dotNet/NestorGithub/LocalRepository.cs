@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace Konamiman.NestorGithub
@@ -244,17 +245,21 @@ namespace Konamiman.NestorGithub
             DoForAllLocalFiles(file => { Directory.SetUnmodified(file); });
         }
 
-        public void Pull(PullConflictStrategy conflictStrategy)
+        public void Pull(PullConflictStrategy conflictStrategy, string remoteCommitSha = null)
         {
             UI.PrintLine("Checking remote status...");
 
             if (!ExistsRemotely())
                 throw new InvalidOperationException("The remote repository doesn't exist!");
 
-            if (!BranchExistsRemotely())
-                throw new InvalidOperationException($"Branch '{LocalBranchName}' doesn't exist remotely!");
+            if (remoteCommitSha == null)
+            {
+                if (!BranchExistsRemotely())
+                    throw new InvalidOperationException($"Branch '{LocalBranchName}' doesn't exist remotely!");
 
-            var remoteCommitSha = Api.GetBranchCommitSha(LocalBranchName);
+                remoteCommitSha = Api.GetBranchCommitSha(LocalBranchName);
+            }
+
             if (remoteCommitSha == LocalCommitSha)
                 throw new InvalidOperationException("Your local repository is up to date with remote, nothing to pull");
 
@@ -445,26 +450,47 @@ namespace Konamiman.NestorGithub
 
         public void SwitchToBranch(string branchName, PullConflictStrategy conflictStrategy)
         {
-            if (!BranchExistsRemotely(branchName))
-            {
-                throw new InvalidOperationException($"Branch '{branchName}' doesn't exist remotely, you can create it with 'ngh -n {branchName}'");
-            }
+            string remoteCommitSha = null;
+            bool branchIsCommitSha = false;
 
-            if(branchName.Equals(LocalBranchName, StringComparison.InvariantCultureIgnoreCase))
+            if (branchName.LooksLikeSha1Hash())
             {
-                throw new InvalidOperationException($"Branch '{branchName}' is already the current local branch, if you want to get the latest remote version do 'ngh pull'.");
-            }
-
-            var remoteCommitSha = Api.GetBranchCommitSha(branchName);
-            var oldLocalBranchName = LocalBranchName;
-            LocalBranchName = branchName;
-            if(remoteCommitSha == LocalCommitSha)
-            {
-                UI.PrintLine($"'{branchName}' is up to date with '{oldLocalBranchName}', nothing to pull");
+                if (Api.GetCommitTreeSha(branchName) == null)
+                {
+                    throw new InvalidOperationException("No commit exists with the specified SHA hash in the remote repsitory");
+                }
+                else
+                {
+                    remoteCommitSha = branchName;
+                    branchIsCommitSha = true;
+                }
             }
             else
             {
-                Pull(conflictStrategy);
+                if (!BranchExistsRemotely(branchName))
+                {
+                    throw new InvalidOperationException($"Branch '{branchName}' doesn't exist remotely, you can create it with 'ngh -n {branchName}'");
+                }
+
+                if (branchName.Equals(LocalBranchName, StringComparison.InvariantCultureIgnoreCase))
+                {
+                    throw new InvalidOperationException($"Branch '{branchName}' is already the current local branch, if you want to get the latest remote version do 'ngh pull'.");
+                }
+
+                remoteCommitSha = Api.GetBranchCommitSha(branchName);
+            }
+
+            var oldLocalBranchName = LocalBranchName;
+            if(!branchIsCommitSha)
+                LocalBranchName = branchName;
+
+            if(remoteCommitSha == LocalCommitSha)
+            {
+                UI.PrintLine($"'{oldLocalBranchName}' is up to date with '{branchName}', nothing to pull");
+            }
+            else
+            {
+                Pull(conflictStrategy, remoteCommitSha);
             }
 
             UpdateStateFile();
@@ -606,6 +632,60 @@ namespace Konamiman.NestorGithub
                 DeletedFiles = deletedFiles.ToArray(),
                 UnchangedFiles = allLocalFiles.Except(addedFiles).Except(modifiedFiles).Except(deletedFiles).ToArray()
             };
+        }
+
+        public void ResetFiles(string pathspec = null)
+        {
+            var localChanges = GetLocalState();
+            var treeFilesByName = ParseTreeFile().ToDictionary(r => r.Path);
+
+            void ResetFile(string path)
+            {
+                if(localChanges.AddedFiles.Contains(path))
+                {
+                    UI.PrintLine($"Deleting {path} ...");
+                    Directory.DeleteFile(path);
+                }
+                else if(localChanges.ModifiedFiles.Contains(path) || localChanges.DeletedFiles.Contains(path))
+                {
+                    UI.PrintLine($"Restoring {path} ...");
+                    var blobSha = treeFilesByName[path].BlobSha;
+                    var fileContents = Api.GetBlob(blobSha);
+                    Directory.CreateFile(fileContents, path);
+                    Directory.SetUnmodified(path);
+                }
+            }
+
+            if (pathspec == null)
+            {
+                if(!localChanges.HasChanges)
+                {
+                    UI.PrintLine("*** No changes match the supplied pathspec, nothing to do");
+                    return;
+                }
+
+                treeFilesByName = ParseTreeFile().ToDictionary(r => r.Path);
+                foreach (var file in localChanges.AllChangedFiles)
+                    ResetFile(file);
+            }
+            else
+            {
+                var matchedFiles = Directory.FindFiles(pathspec).Select(f => Directory.RelativePathOf(f));
+                var filesToProcess = matchedFiles.Intersect(localChanges.AllChangedFiles).ToArray();
+                if (filesToProcess.Length == 0)
+                {
+                    var deletedFile = localChanges.DeletedFiles.FirstOrDefault(f => f.Equals(pathspec, StringComparison.InvariantCultureIgnoreCase));
+                    if (deletedFile == null)
+                    {
+                        UI.PrintLine("*** No changes match the supplied pathspec, nothing to do");
+                        return;
+                    }
+                    filesToProcess = new[] { deletedFile };
+                }
+
+                foreach (var file in filesToProcess)
+                    ResetFile(file);
+            }
         }
 
         private void DoForAllLocalFiles(Action<string> action)

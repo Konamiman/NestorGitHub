@@ -68,6 +68,9 @@
     <Compile Include="Program.Merge.cs">
       <DependentUpon>Program.cs</DependentUpon>
     </Compile>
+    <Compile Include="Program.Reset.cs">
+      <DependentUpon>Program.cs</DependentUpon>
+    </Compile>
     <Compile Include="RepositoryState.cs" />
     <Compile Include="UI.cs" />
     <Compile Include="Program.CloneLink.cs">

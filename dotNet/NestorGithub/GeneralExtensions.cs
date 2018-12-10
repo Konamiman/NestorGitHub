@@ -29,5 +29,9 @@ namespace Konamiman.NestorGithub
 
         public static string[] SplitBySlash(this string value) =>
             value.Split(slashAsArray, StringSplitOptions.RemoveEmptyEntries);
+
+        public static bool LooksLikeSha1Hash(this string value) =>
+            value.Length == 40 &&
+            value.All(c => char.IsDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
     }
 }

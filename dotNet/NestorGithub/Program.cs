@@ -17,7 +17,7 @@ namespace Konamiman.NestorGithub
                 //args = new[] { "clone", "sandbox", @"c:\temp\nex" };
                 //args = new[] { "pull", "-d", @"c:\temp\TestingNgh" };
                 //args = new[] { "branch", "-d", "branchie2" };
-                args = new[] { "status" };
+                args = new[] { "reset", "*.txt" };
 
             var result = new Program().Run(args);
             if (Debugger.IsAttached) Console.ReadKey();

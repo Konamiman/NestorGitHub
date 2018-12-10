@@ -155,5 +155,30 @@ namespace Konamiman.NestorGithub
 
             return fixedPath.Replace(Path.DirectorySeparatorChar, '/');
         }
+
+        public static string AbsoluteDirectoryOf(string path)
+        {
+            if (path == null)
+                return Path.GetFullPath(".");
+
+            var pathDirectory = Path.GetDirectoryName(path);
+            if (pathDirectory == "") pathDirectory = ".";
+
+            return Path.GetFullPath(pathDirectory);
+        }
+
+        public string RelativePathOf(string path)
+        {
+            var absolutePath = PathWithProperCasingAndSeparators(path);
+            return absolutePath.Substring(rootPath.Length + 1);
+        }
+
+        public string[] FindFiles(string pathspec)
+        {
+            var directoryToSearchIn = AbsoluteDirectoryOf(pathspec);
+            var searchPattern = Path.GetFileName(pathspec);
+            if (searchPattern == "") searchPattern = "*.*";
+            return Directory.GetFiles(directoryToSearchIn, searchPattern);
+        }
     }
 }
