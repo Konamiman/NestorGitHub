@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
@@ -12,13 +11,6 @@ namespace Konamiman.NestorGithub
     {
         static int Main(string[] args)
         {
-            if(Debugger.IsAttached)
-                //args = new[] { "commit", "-d", @"c:\temp\nex", "First commit from NestorGithub!!"};
-                //args = new[] { "clone", "sandbox", @"c:\temp\nex" };
-                //args = new[] { "pull", "-d", @"c:\temp\TestingNgh" };
-                //args = new[] { "branch", "-d", "branchie2" };
-                args = new[] { "reset", "*.txt" };
-
             var result = new Program().Run(args);
             if (Debugger.IsAttached) Console.ReadKey();
             return result;

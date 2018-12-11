@@ -1,10 +1,8 @@
-﻿using System.Linq;
-
-namespace Konamiman.NestorGithub
+﻿namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        #pragma warning disable 414
+#pragma warning disable 414
 
         static readonly string unlinkCommandLine = "ngh unlink";
 
@@ -14,7 +12,7 @@ Deletes the application data but otherwise the directory contents are kept untou
 
         void UnlinkCommand(string[] args)
         {
-            #pragma warning restore 414
+#pragma warning restore 414
 
             var localRepository = GetExistingLocalRepository();
 

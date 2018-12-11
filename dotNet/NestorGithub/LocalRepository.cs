@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 namespace Konamiman.NestorGithub
@@ -549,7 +548,7 @@ namespace Konamiman.NestorGithub
             return remoteCommitSha == LocalCommitSha;
         }
 
-        internal void Merge(string sourceBranch, string baseBranch, string commitMessage)
+        public void Merge(string sourceBranch, string baseBranch, string commitMessage)
         {
             if(!BranchExistsRemotely(sourceBranch))
                 throw new InvalidOperationException($"Branch '{sourceBranch}' doesn't exist remotely.");

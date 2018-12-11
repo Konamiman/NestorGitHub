@@ -1,14 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        #pragma warning disable 414
+#pragma warning disable 414
 
         static readonly string mergeCommandLine = "ngh merge <source branch> <base branch> [<commit message>]";
 
@@ -18,12 +14,12 @@ The merge is done in the remote repository, nothing is done locally.";
 
         void MergeCommand(string[] args)
         {
-            #pragma warning restore 414
+#pragma warning restore 414
 
             if (args.Length < 2)
                 throw BadParameter("Source and base branches are required");
 
-            if(args.Length > 3)
+            if (args.Length > 3)
                 throw BadParameter("Please specify the commit message in quotes if it contains spaces");
 
             var localRepository = GetExistingLocalRepository();

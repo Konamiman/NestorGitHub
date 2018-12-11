@@ -5,7 +5,7 @@ namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        #pragma warning disable 414
+#pragma warning disable 414
 
         static readonly string newCommandLine = "ngh new [-p] <repository name> [<repository description>]";
 
@@ -15,7 +15,7 @@ namespace Konamiman.NestorGithub
 
         void NewCommand(string[] args)
         {
-            #pragma warning restore 414
+#pragma warning restore 414
 
             if (args.Length == 0 || (args.Length == 1 && args[0].StartsWith("-")))
                 throw BadParameter("Repository name is required");
@@ -34,7 +34,7 @@ namespace Konamiman.NestorGithub
             var repositoryName = args[0];
             if (IsFullRepositoryName(repositoryName))
                 throw BadParameter("Please specify a repository name without username (you can create repositories in your own account only)");
-            else if(user == "")
+            else if (user == "")
                 throw BadParameter("Please specify username and password or token in the configuration file");
 
             var respositoryDescription = args.Skip(1).JoinWithSpaces();

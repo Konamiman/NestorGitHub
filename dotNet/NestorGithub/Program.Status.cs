@@ -1,20 +1,19 @@
 ﻿using System;
-using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        #pragma warning disable 414
+#pragma warning disable 414
 
         static readonly string statusCommandLine = "ngh status";
 
-        static readonly string statusCommandExplanation = 
+        static readonly string statusCommandExplanation =
 @"Shows a list of changes (added, modified and deleted files) in the local repository.";
 
         void StatusCommand(string[] args)
         {
-            #pragma warning restore 414
+#pragma warning restore 414
 
             var localRepository = GetExistingLocalRepository();
 
@@ -30,7 +29,7 @@ namespace Konamiman.NestorGithub
             {
                 try
                 {
-                    if(!localRepository.BranchExistsRemotely())
+                    if (!localRepository.BranchExistsRemotely())
                         UI.PrintLine("Branch doesn't exist remotely, it will be created on commit.");
                     else if (localRepository.IsUpToDateWithRemote())
                         UI.PrintLine("Your local repository is up to date with the remote repository.");
@@ -50,7 +49,7 @@ namespace Konamiman.NestorGithub
 
             var changes = localRepository.GetLocalState();
 
-            if(!changes.HasChanges)
+            if (!changes.HasChanges)
             {
                 UI.PrintLine("No changes in the local repository.");
                 return;

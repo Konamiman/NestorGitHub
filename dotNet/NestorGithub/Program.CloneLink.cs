@@ -1,17 +1,15 @@
-﻿using System.Linq;
-
-namespace Konamiman.NestorGithub
+﻿namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        #pragma warning disable 414
+#pragma warning disable 414
 
         static readonly string cloneCommandLine = "ngh clone [<owner>/]<repository name>";
 
         static readonly string cloneCommandExplanation =
 @"Creates and links a local repository from the contents of a remote repository in the current local directory.
 Default owner is the configured GitHub user name.";
-  
+
         void CloneCommand(string[] args) => Clone(args, false);
 
         static readonly string linkCommandLine = "ngh link [<owner>/]<repository name>";
@@ -22,7 +20,7 @@ and no files are downloaded.";
 
         void LinkCommand(string[] args) => Clone(args, true);
 
-        #pragma warning restore  414
+#pragma warning restore 414
 
         void Clone(string[] args, bool linkOnly)
         {
@@ -33,7 +31,7 @@ and no files are downloaded.";
             var api = GetApi(suppliedRepositoryName);
 
             var repositoryName = api.GetProperlyCasedRepositoryName();
-            if(repositoryName == null)
+            if (repositoryName == null)
                 throw BadParameter($"There's no repository named {suppliedRepositoryName} in GitHub (visible to you, at least)");
 
             var localRepository = new LocalRepository(null, api, allowNonLinkedDirectory: true);

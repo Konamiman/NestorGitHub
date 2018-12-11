@@ -4,7 +4,7 @@ namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        #pragma warning disable 414
+#pragma warning disable 414
 
         static readonly string helpCommandLine = "ngh help <command>";
 
@@ -12,7 +12,7 @@ namespace Konamiman.NestorGithub
 
         void HelpCommand(string[] args)
         {
-            #pragma warning restore 414
+#pragma warning restore 414
 
             if (args.Length == 0)
                 throw BadParameter("Please specify a command to display help for");
@@ -20,7 +20,7 @@ namespace Konamiman.NestorGithub
             var commandName = args[0];
 
             var commandLineField = this.GetType().GetField($"{commandName}CommandLine", BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.IgnoreCase);
-            if(commandLineField == null)
+            if (commandLineField == null)
                 throw BadParameter($"Unknown command '{commandName}'");
 
             var commandLine = commandLineField.GetValue(null);

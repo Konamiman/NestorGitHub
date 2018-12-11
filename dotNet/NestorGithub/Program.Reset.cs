@@ -2,7 +2,7 @@
 {
     partial class Program
     {
-        #pragma warning disable 414
+#pragma warning disable 414
 
         static readonly string resetCommandLine = "ngh reset <pathspec>|*";
 
@@ -16,7 +16,7 @@ or by specifying '*'.";
 
         void ResetCommand(string[] args)
         {
-            #pragma warning restore 414
+#pragma warning restore 414
 
             if (args.Length == 0)
                 throw BadParameter("pathspec is required.");

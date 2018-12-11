@@ -226,7 +226,7 @@ namespace Konamiman.NestorGithub
             Post($"repos/{FullRepositoryName}/git/refs", input);
         }
 
-        internal void MergeBranches(string sourceBranch, string baseBranch, string commitMessage)
+        public void MergeBranches(string sourceBranch, string baseBranch, string commitMessage)
         {
             var json = $@"
 {{
@@ -242,7 +242,7 @@ namespace Konamiman.NestorGithub
             Post($"repos/{FullRepositoryName}/merges", json);
         }
 
-        internal void DeleteBranch(string branchName)
+        public void DeleteBranch(string branchName)
         {
             Delete($"repos/{FullRepositoryName}/git/refs/heads/{branchName}");
         }

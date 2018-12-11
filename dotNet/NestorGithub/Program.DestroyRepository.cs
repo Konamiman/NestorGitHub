@@ -4,7 +4,7 @@ namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        #pragma warning disable 414
+#pragma warning disable 414
 
         static readonly string destroyCommandLine = "ngh destroy [<owner>/]<repository name>";
 
@@ -14,7 +14,7 @@ Be careful, this can't be undone!";
 
         void DestroyCommand(string[] args)
         {
-            #pragma warning restore 414
+#pragma warning restore 414
 
             if (args.Length == 0)
                 throw BadParameter("Repository name is required");

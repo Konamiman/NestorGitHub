@@ -4,7 +4,7 @@ namespace Konamiman.NestorGithub
 {
     partial class Program
     {
-        #pragma warning disable 414
+#pragma warning disable 414
 
         static readonly string branchesCommandLine = "ngh branches";
 
@@ -12,12 +12,12 @@ namespace Konamiman.NestorGithub
 
         void BranchesCommand(string[] args)
         {
-            #pragma warning restore 414
+#pragma warning restore 414
 
             var localRepository = GetExistingLocalRepository();
             var branchNames = localRepository.Api.GetBranches();
 
-            if(branchNames.Length == 0)
+            if (branchNames.Length == 0)
             {
                 UI.PrintLine($"No branches exist in repository {localRepository.FullRepositoryName}");
                 return;

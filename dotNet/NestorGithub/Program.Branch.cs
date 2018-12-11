@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
@@ -22,7 +18,10 @@ ngh branch -d <branch name>";
 -sl: Switch to the specified remote branch, keep local version on conflict
 -n: Create a new remote branch, pointing to the current commit
     or to the commit pointed by <base branch> if specified
--d: Delete a remote branch";
+-d: Delete a remote branch
+
+You can switch to a commit by specifying its SHA hash instead of a branch name,
+this will keep the current local branch name unchanged.";
 
         void BranchCommand(string[] args)
         {
