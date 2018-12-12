@@ -46,7 +46,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CommitData.cs" />
     <Compile Include="Configuration.cs" />
     <Compile Include="CreateRepositoryResponse.cs" />
     <Compile Include="ApiClient.cs" />

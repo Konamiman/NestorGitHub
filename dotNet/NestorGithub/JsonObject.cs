@@ -4,6 +4,11 @@ using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
+    /// <summary>
+    /// This class is used to decouple the application code from the specific JSON management library used,
+    /// if some day we decide to use a different package all we need to change is this class
+    /// and the code that instantiates it.
+    /// </summary>
     class JsonObject
     {
         private readonly JObject jObject;

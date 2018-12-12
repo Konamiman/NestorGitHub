@@ -4,6 +4,11 @@ using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
+    /// <summary>
+    /// This class represents a local copy of a GitHub repository, and contains the logic necessary
+    /// to perform the commands exposed by the aplication. It delegates to the ApiClient and FilesystemDirectory
+    /// classes as appropriate.
+    /// </summary>
     class LocalRepository
     {
         const string databaseDirectory = ".ngh";
@@ -93,12 +98,12 @@ namespace Konamiman.NestorGithub
 
             if (IsInitialized)
             {
-                PrintLine($"Respository {fullRepositoryName} already initialized, continuing the clone process\r\n");
+                UI.PrintLine($"Respository {fullRepositoryName} already initialized, continuing the clone process\r\n");
                 treeFiles = ParseTreeFile();
             }
             else
             {
-                PrintLine("Getting repository information...");
+                UI.PrintLine("Getting repository information...");
 
                 var branchCount = Api.GetBranchCount();
                 if(branchCount == 0)
@@ -112,17 +117,18 @@ namespace Konamiman.NestorGithub
                 UpdateTreeFile(treeFiles);
             }
 
-            PrintLine($"Getting files for branch {LocalBranchName}");
+            UI.PrintLine($"Getting files for branch {LocalBranchName}");
             foreach (var file in treeFiles)
             {
                 if (Directory.FileExists(file.Path) && Directory.GetFileSize(file.Path) == file.Size)
                 {
-                    PrintLine($"  {file.Path} - already exists, skipping");
+                    UI.PrintLine($"  {file.Path} - already exists, skipping");
                 }
                 else
                 {
-                    PrintLine($"  {file.Path} ...");
-                    DownloadFile(file);
+                    UI.PrintLine($"  {file.Path} ...");
+                    var fileContents = Api.GetBlob(file.BlobSha);
+                    Directory.CreateFile(fileContents, file.Path);
                 }
             }
 
@@ -140,7 +146,7 @@ namespace Konamiman.NestorGithub
 
             RepositoryFileReference[] treeFiles = null;
 
-            PrintLine("Getting repository information...");
+            UI.PrintLine("Getting repository information...");
 
             var branchCount = Api.GetBranchCount();
             if (branchCount == 0)
@@ -183,13 +189,13 @@ namespace Konamiman.NestorGithub
 
         public void Commit(string authorName, string authorEmail, string commitMessage)
         {
-            PrintLine("Checking local changes...");
+            UI.PrintLine("Checking local changes...");
             var localState = GetLocalState();
 
             if (!localState.HasChanges)
                 throw new InvalidOperationException("No local changes, nothing to commit");
 
-            PrintLine("Checking state of remote repository...");
+            UI.PrintLine("Checking state of remote repository...");
 
             if (!ExistsRemotely())
                 throw new InvalidOperationException("The remote repository doesn't exist!");
@@ -201,7 +207,7 @@ namespace Konamiman.NestorGithub
                     throw new InvalidOperationException($"Branch {LocalBranchName} doesn't exist remotely, you can create it with 'ngh branch -n {LocalBranchName}'");
                 }
 
-                PrintLine("Creating initial empty commit...");
+                UI.PrintLine("Creating initial empty commit...");
                 LocalCommitSha = CreateInitialEmptyCommit(LocalBranchName, authorName, authorEmail);
             }
             else if (!IsUpToDateWithRemote())
@@ -212,10 +218,10 @@ namespace Konamiman.NestorGithub
             var addedAndModifiedFileReferences = new List<RepositoryFileReference>();
             if (addedAndModifiedFiles.Length > 0)
             {
-                PrintLine("Pushing new and changed files...");
+                UI.PrintLine("Pushing new and changed files...");
                 foreach (var filePath in addedAndModifiedFiles)
                 {
-                    PrintLine($"  {filePath}...");
+                    UI.PrintLine($"  {filePath}...");
                     var fileContents = Directory.GetFileContents(filePath);
                     var fileSha = Api.CreateBlob(fileContents);
                     addedAndModifiedFileReferences.Add(new RepositoryFileReference { Path = filePath, Size = fileContents.Length, BlobSha = fileSha });
@@ -226,16 +232,16 @@ namespace Konamiman.NestorGithub
             var allChangedFiles = localState.AllChangedFiles;
             var unchangedFileReferences = currentCommitFileReferences.Where(r => !allChangedFiles.Contains(r.Path)).ToArray();
 
-            PrintLine("Creating remote tree...");
+            UI.PrintLine("Creating remote tree...");
             var treeSha = Api.CreateTree(unchangedFileReferences.Union(addedAndModifiedFileReferences).ToArray());
 
-            PrintLine("Creating commit...");
+            UI.PrintLine("Creating commit...");
             var newCommitSha = Api.CreateCommit(commitMessage, treeSha, LocalCommitSha, authorName, authorEmail);
 
-            PrintLine("Updating branch reference...");
+            UI.PrintLine("Updating branch reference...");
             Api.SetBranchCommitSha(LocalBranchName, newCommitSha);
 
-            PrintLine("Updating local state...");
+            UI.PrintLine("Updating local state...");
 
             LocalCommitSha = newCommitSha;
             var currentLocalFileReferences = unchangedFileReferences.Union(addedAndModifiedFileReferences).ToArray();
@@ -417,7 +423,7 @@ namespace Konamiman.NestorGithub
 @"The local repository doesn't point to any commit, please specify a base branch name. You can list the existing remote branches with 'ngh branches'.");
                 else
                 {
-                    PrintLine("Creating initial empty commit...");
+                    UI.PrintLine("Creating initial empty commit...");
                     commitSha = CreateInitialEmptyCommit(branchName, authorName, authorEmail);
                 }
             }
@@ -511,8 +517,7 @@ namespace Konamiman.NestorGithub
             {
                 AddedFiles = addedFilenames.ToArray(),
                 ModifiedFiles = modifiedFilenames.ToArray(),
-                DeletedFiles = deletedFilenames.ToArray(),
-                UnchangedFiles = commonFilenames.Except(modifiedFilenames).ToArray()
+                DeletedFiles = deletedFilenames.ToArray()
             };
         }
 
@@ -583,12 +588,6 @@ namespace Konamiman.NestorGithub
             Directory.CreateFile(fileLines.JoinInLines(), treeFilePath);
         }
 
-        private void DownloadFile(RepositoryFileReference fileReference)
-        {
-            var fileContents = Api.GetBlob(fileReference.BlobSha);
-            Directory.CreateFile(fileContents, fileReference.Path);
-        }
-
         private void ParseStateFile()
         {
             var stateFileContents = Directory.ReadTextFile(stateFilePath);
@@ -596,11 +595,6 @@ namespace Konamiman.NestorGithub
             this.FullRepositoryName = stateFileParts[0];
             this.LocalBranchName = stateFileParts[1];
             this.LocalCommitSha = stateFileParts[2];
-        }
-
-        private static void PrintLine(string value)
-        {
-            UI.PrintLine(value);
         }
 
         public RepositoryState GetLocalState()
@@ -628,8 +622,7 @@ namespace Konamiman.NestorGithub
             {
                 AddedFiles = addedFiles.ToArray(),
                 ModifiedFiles = modifiedFiles.ToArray(),
-                DeletedFiles = deletedFiles.ToArray(),
-                UnchangedFiles = allLocalFiles.Except(addedFiles).Except(modifiedFiles).Except(deletedFiles).ToArray()
+                DeletedFiles = deletedFiles.ToArray()
             };
         }
 

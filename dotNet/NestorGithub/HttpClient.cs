@@ -5,11 +5,15 @@ using System.Text;
 
 namespace Konamiman.NestorGithub
 {
+    /// <summary>
+    /// Generic HTTP client. It doesn't have anything specific to GitHub API, except that 
+    /// assumes that the content to send, if any, is always JSON.
+    /// </summary>
     class HttpClient : IHttpClient
     {
-        System.Net.Http.HttpClient httpClient;
+        readonly System.Net.Http.HttpClient httpClient;
 
-        public void SetHeaders(IDictionary<string, string> headers)
+        public void SetDefaultHeaders(IDictionary<string, string> headers)
         {
             foreach (var kv in headers)
                 httpClient.DefaultRequestHeaders.Add(kv.Key, kv.Value);
@@ -25,7 +29,7 @@ namespace Konamiman.NestorGithub
             httpClient = new System.Net.Http.HttpClient();
         }
 
-        public HttpResponse<T> ExecuteRequest<T>(HttpMethod method, string path, string content = null, string accept = null) where T:class
+        public HttpResponse<T> ExecuteRequest<T>(HttpMethod method, string path, string accept, string content = null) where T:class
         {
             bool isBinary = false;
             if (typeof(T) == typeof(byte[]))
@@ -35,7 +39,7 @@ namespace Konamiman.NestorGithub
 
             var request = new HttpRequestMessage(method, path);
             if (content != null) request.Content = new StringContent(content, Encoding.UTF8, "application/json");
-            request.Headers.Add("Accept", isBinary ? "application/vnd.github.v3.raw" : "application/vnd.github.v3+json");
+            request.Headers.Add("Accept", accept);
             var response = new HttpResponse<T>();
 
             var task = httpClient.SendAsync(request)

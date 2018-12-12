@@ -5,10 +5,17 @@ using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
+    /// <summary>
+    /// This class encapsulates all the file and directory operations performed on a directory in the local filesystem.
+    /// </summary>
     class FilesystemDirectory
     {
         private string rootPath;
 
+        /// <summary>
+        /// Creates a new instance of the class
+        /// </summary>
+        /// <param name="path">Root path where the class will operate, null for the current directory.</param>
         public FilesystemDirectory(string path = null)
         {
             this.rootPath = PathWithProperCasingAndSeparators(path ?? Directory.GetCurrentDirectory());
@@ -22,72 +29,73 @@ namespace Konamiman.NestorGithub
 
         public static bool AbsoluteDirectoryExists(string path) => Directory.Exists(path);
 
-        public bool DirectoryExists(params string[] pathSegments) => Directory.Exists(Combine(pathSegments));
+        public bool DirectoryExists(string path) => Directory.Exists(AbsolutePathOf(path));
 
-        public bool FileExists(params string[] pathSegments) => File.Exists(Combine(pathSegments));
+        public bool FileExists(string path) => File.Exists(AbsolutePathOf(path));
 
-        public void CreateFile(string contents, params string[] pathSegments)
+        public void CreateFile(string contents, string path)
         {
-            CreateFile(Encoding.UTF8.GetBytes(contents), pathSegments);
+            CreateFile(Encoding.UTF8.GetBytes(contents), path);
         }
 
-        public void CreateFile(byte[] contents, params string[] pathSegments)
+        public void CreateFile(byte[] contents, string path)
         {
-            var fileInfo = new FileInfo(Combine(pathSegments));
+            var fileInfo = new FileInfo(AbsolutePathOf(path));
             fileInfo.Directory.Create();
             File.WriteAllBytes(fileInfo.FullName, contents);
         }
 
-        public byte[] GetFileContents(params string[] pathSegments)
+        public byte[] GetFileContents(string path)
         {
-            return File.ReadAllBytes(Combine(pathSegments));
+            return File.ReadAllBytes(AbsolutePathOf(path));
         }
 
         public string ReadTextFile(string path)
         {
-            return File.ReadAllText(Combine(rootPath, path), Encoding.UTF8);
+            return File.ReadAllText(AbsolutePathOf(rootPath, path), Encoding.UTF8);
         }
 
         public void DeleteDirectory(string path)
         {
             if(DirectoryExists(path))
             {
-                Directory.Delete(Combine(path), recursive: true);
+                Directory.Delete(AbsolutePathOf(path), recursive: true);
             }
         }
 
         public long GetFileSize(string path)
         {
-            var fileInfo = new FileInfo(Combine(path));
+            var fileInfo = new FileInfo(AbsolutePathOf(path));
             return fileInfo.Length;
         }
 
-        private string Combine(params string[] pathSegments)
-        {
-            return CombinePath(rootPath, CombinePath(pathSegments));
-        }
 
         public static string CombinePath(params string[] pathSegments)
         {
             return Path.Combine(pathSegments).Replace(Path.DirectorySeparatorChar, '/');
         }
 
-        public bool IsModified(params string[] pathSegments)
+        private string AbsolutePathOf(params string[] pathSegments)
         {
-            var filePath = Combine(pathSegments);
+            return CombinePath(rootPath, CombinePath(pathSegments));
+        }
+
+        public bool IsModified(string path)
+        {
+            var filePath = AbsolutePathOf(path);
             return (File.GetAttributes(filePath) & FileAttributes.Archive) == FileAttributes.Archive;
         }
 
-        public void SetModified(params string[] pathSegments)
+        public void SetModified(string path)
         {
-            var filePath = Combine(pathSegments);
+            var filePath = AbsolutePathOf(path);
             var currentAttributes = File.GetAttributes(filePath);
             File.SetAttributes(filePath, currentAttributes | FileAttributes.Archive);
         }
 
-        public void SetUnmodified(params string[] pathSegments)
+        public void SetUnmodified(string path)
         {
-            var filePath = Combine(pathSegments);
+            var filePath = AbsolutePathOf(path);
             var currentAttributes = File.GetAttributes(filePath);
             File.SetAttributes(filePath, currentAttributes & ~FileAttributes.Archive);
         }
@@ -117,7 +125,7 @@ namespace Konamiman.NestorGithub
 
         public void DeleteFile(string filename)
         {
-            File.Delete(Combine(filename));
+            File.Delete(AbsolutePathOf(filename));
         }
 
         public bool MoveOneDirectoryUp()

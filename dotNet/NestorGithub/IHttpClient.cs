@@ -5,10 +5,10 @@ namespace Konamiman.NestorGithub
 {
     interface IHttpClient
     {
-        void SetHeaders(IDictionary<string, string> headers);
+        void SetDefaultHeaders(IDictionary<string, string> headers);
 
         void SetUrl(string url);
 
-        HttpResponse<T> ExecuteRequest<T>(HttpMethod method, string path, string content = null, string accept = null) where T : class;
+        HttpResponse<T> ExecuteRequest<T>(HttpMethod method, string path, string accept, string content = null) where T : class;
     }
 }

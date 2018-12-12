@@ -11,6 +11,5 @@ namespace Konamiman.NestorGithub
         public string[] AddedFiles { get; set; }
         public string[] ModifiedFiles { get; set; }
         public string[] DeletedFiles { get; set; }
-        public string[] UnchangedFiles { get; set; }
     }
 }

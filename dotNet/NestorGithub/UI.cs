@@ -3,6 +3,9 @@ using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
+    /// <summary>
+    /// This class encapsulates all the interaction with the user.
+    /// </summary>
     static class UI
     {
         public static void Print(string value)

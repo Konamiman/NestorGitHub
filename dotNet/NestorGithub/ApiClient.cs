@@ -6,6 +6,10 @@ using System.Linq;
 
 namespace Konamiman.NestorGithub
 {
+    /// <summary>
+    /// This class encapsulates all the GitHub API operations. GraphQL is used whenever possible and convenient,
+    /// Rest API is used otherwise.
+    /// </summary>
     class ApiClient
     {
         private readonly IHttpClient httpClient;
@@ -34,7 +38,7 @@ namespace Konamiman.NestorGithub
             if (!string.IsNullOrWhiteSpace(user))
                 headers.Add("Authorization", "Basic " + Convert.ToBase64String(Encoding.ASCII.GetBytes($"{user}:{passwordOrToken}")));
 
-            httpClient.SetHeaders(headers);
+            httpClient.SetDefaultHeaders(headers);
         }
 
         public string FullRepositoryName { get; }
@@ -112,7 +116,7 @@ namespace Konamiman.NestorGithub
 
         public RepositoryFileReference[] GetTreeFileReferences(string treeSha)
         {
-            var response = Get<string>($"/repos/{FullRepositoryName}/git/trees/{treeSha}?recursive=1").AsJsonObject();
+            var response = GetAsString($"/repos/{FullRepositoryName}/git/trees/{treeSha}?recursive=1").AsJsonObject();
             var treeData = response.Value<JsonObject[]>("tree");
             return treeData
                 .Where(item => item.Value("type") == "blob")
@@ -147,7 +151,7 @@ namespace Konamiman.NestorGithub
 
         public byte[] GetBlob(string blobSha)
         {
-            return Get<byte[]>($"/repos/{FullRepositoryName}/git/blobs/{blobSha}");
+            return GetAsBinary($"/repos/{FullRepositoryName}/git/blobs/{blobSha}");
         }
 
         public string CreateBlob(byte[] blobContents)
@@ -204,6 +208,8 @@ namespace Konamiman.NestorGithub
             return $"{owner}/{repoName}";
         }
 
+        //This is used only to create a branch when no branches exist at all in the repository,
+        //otherwise all the file operations are done through the blob entry points.
         public void CreateFileInRemoteRepository(string path, string branch, string commitMessage, byte[] contents)
         {
             var input = $@"
@@ -213,7 +219,6 @@ namespace Konamiman.NestorGithub
   ""content"": {Convert.ToBase64String(contents).AsJson()}
 }}";
             Put($"repos/{FullRepositoryName}/contents/{path}", input);
-            
         }
 
         public void CreateBranch(string branch, string commitSha)
@@ -247,35 +252,48 @@ namespace Konamiman.NestorGithub
             Delete($"repos/{FullRepositoryName}/git/refs/heads/{branchName}");
         }
 
-        private string GraphqlQueryForRepository(string queryBody)
+        const string httpBinaryAccept = "application/vnd.github.v3.raw";
+        const string httpJsonAccept = "application/vnd.github.v3+json";
+
+        private HttpResponse<string> ExecuteStringRequest(HttpMethod method, string path, string content = null)
         {
-            return $"query {{ repository(owner: {repositoryOwner.AsJson()}, name: {repositoryName.AsJson()}) {{ {queryBody} }} }}";
+            return httpClient.ExecuteRequest<string>(method, path, httpJsonAccept, content);
         }
 
-        private T Get<T>(string path) where T:class
+        private HttpResponse<byte[]> ExecuteBinaryRequest(HttpMethod method, string path, string content = null)
         {
-            return DoRestApi(() => httpClient.ExecuteRequest<T>(HttpMethod.Get, path));
+            return httpClient.ExecuteRequest<byte[]>(method, path, httpBinaryAccept, content);
+        }
+
+        private string GetAsString(string path)
+        {
+            return DoRestApi(() => ExecuteStringRequest(HttpMethod.Get, path));
+        }
+
+        private byte[] GetAsBinary(string path)
+        {
+            return DoRestApi(() => ExecuteBinaryRequest(HttpMethod.Get, path));
         }
 
         private string Post(string path, string content = null)
         {
-            return DoRestApi(() => httpClient.ExecuteRequest<string>(HttpMethod.Post, path, content));
+            return DoRestApi(() => ExecuteStringRequest(HttpMethod.Post, path, content));
         }
 
         private string Put(string path, string content = null)
         {
-            return DoRestApi(() => httpClient.ExecuteRequest<string>(HttpMethod.Put, path, content));
+            return DoRestApi(() => ExecuteStringRequest(HttpMethod.Put, path, content));
         }
 
         private static readonly HttpMethod httpPatch = new HttpMethod("PATCH");
         private string Patch(string path, string content = null)
         {
-            return DoRestApi(() => httpClient.ExecuteRequest<string>(httpPatch, path, content));
+            return DoRestApi(() => ExecuteStringRequest(httpPatch, path, content));
         }
 
         private string Delete(string path)
         {
-            return DoRestApi(() => httpClient.ExecuteRequest<string>(HttpMethod.Delete, path));
+            return DoRestApi(() => ExecuteStringRequest(HttpMethod.Delete, path));
         }
 
         private T DoRestApi<T>(Func<HttpResponse<T>> apiAction) where T:class
@@ -287,10 +305,15 @@ namespace Konamiman.NestorGithub
                 throw ApiException.FromResponse(response);
         }
 
+        private string GraphqlQueryForRepository(string queryBody)
+        {
+            return $"query {{ repository(owner: {repositoryOwner.AsJson()}, name: {repositoryName.AsJson()}) {{ {queryBody} }} }}";
+        }
+
         private JsonObject DoGraphQl(string query, bool returnNullWhenNotFound = false)
         {
             var body = $@"{{ ""query"": {query.AsJson()} }}".Replace("\r\n", "");
-            var response = httpClient.ExecuteRequest<string>(HttpMethod.Post, "https://api.github.com/graphql", body);
+            var response = ExecuteStringRequest(HttpMethod.Post, "https://api.github.com/graphql", body);
             if (response.IsError)
                 throw ApiException.FromResponse(response);
 

@@ -16,10 +16,6 @@ namespace Konamiman.NestorGithub
             return result;
         }
 
-        public Program()
-        {
-        }
-
         string user, password;
 
         int Run(string[] args)
